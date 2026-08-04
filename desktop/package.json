@@ -1,0 +1,37 @@
+{
+  "name": "chatconnect-desktop",
+  "version": "1.0.0",
+  "description": "ChatConnect desktop shell (Windows/Mac/Linux) via Electron",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.chatconnect.app",
+    "productName": "ChatConnect",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "../frontend/dist/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Network"
+    }
+  }
+}

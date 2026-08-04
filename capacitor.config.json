@@ -1,0 +1,14 @@
+{
+  "appId": "com.chatconnect.app",
+  "appName": "ChatConnect",
+  "webDir": "frontend/dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}
