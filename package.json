@@ -5,6 +5,8 @@
   "description": "ChatConnect — real-time MERN chat app (web, desktop via Electron, mobile via Capacitor)",
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "build": "npm run install:all && npm run build:frontend",
+    "start": "npm run start:backend",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "build:frontend": "npm run build --prefix frontend",
     "start:backend": "npm run start --prefix backend",
