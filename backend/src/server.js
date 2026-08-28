@@ -12,6 +12,7 @@ import { errorHandler, notFound } from "./middleware/errorHandler.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
+import storyRoutes from "./routes/storyRoutes.js";
 import { initSocket } from "./socket/socket.js";
 import { apiLimiter } from "./middleware/rateLimiter.js";
 
@@ -52,6 +53,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/stories", storyRoutes);
 
 // ---- Serve frontend build in production (optional, single-service deploy) ----
 if (process.env.NODE_ENV === "production") {

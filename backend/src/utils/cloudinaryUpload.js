@@ -4,10 +4,10 @@ import cloudinary from "../config/cloudinary.js";
  * Uploads an in-memory file buffer (from multer memoryStorage) to Cloudinary
  * using an upload stream, so we never need to write temp files to disk.
  */
-export const uploadBufferToCloudinary = (buffer, folder) => {
+export const uploadBufferToCloudinary = (buffer, folder, resourceType = "auto") => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "image" },
+      { folder, resource_type: resourceType },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);

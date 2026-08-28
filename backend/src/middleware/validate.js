@@ -5,11 +5,24 @@ export const validate = (schema) => (req, res, next) => {
       query: req.query,
       params: req.params,
     });
+
     next();
   } catch (err) {
-    return res.status(400).json({
-      message: "Validation failed",
-      errors: err.errors.map(e => ({ path: e.path.join('.'), message: e.message })),
+    if (err.name === "ZodError") {
+      return res.status(400).json({
+        message: err.issues?.[0]?.message || "Validation failed",
+
+        errors: (err.issues || []).map((e) => ({
+          path: (e.path ?? []).join("."),
+          message: e.message,
+        })),
+      });
+    }
+
+    console.error("[Validation Error]", err);
+
+    return res.status(500).json({
+      message: "Internal Server Error during validation",
     });
   }
 };

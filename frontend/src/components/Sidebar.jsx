@@ -3,6 +3,7 @@ import { Search, Users } from "lucide-react";
 import { useChatStore } from "../store/chatStore.js";
 import { useAuthStore } from "../store/authStore.js";
 import SidebarSkeleton from "./SidebarSkeleton.jsx";
+import StoryStrip from "./StoryStrip.jsx";
 
 const Sidebar = () => {
   const { users, getUsers, isUsersLoading, selectedUser, setSelectedUser, getConversations } =
@@ -27,6 +28,7 @@ const Sidebar = () => {
 
   return (
     <aside className="flex w-full max-w-xs shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+      <StoryStrip />
       <div className="border-b border-neutral-200 p-3 dark:border-neutral-800">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />

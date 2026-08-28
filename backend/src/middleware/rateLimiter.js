@@ -10,16 +10,8 @@ const authLimiterFlexible = new RateLimiterMemory({
 export const authLimiter = async (req, res, next) => {
   const key = req.ip + (req.body.email ? `_${req.body.email}` : '');
   try {
-    const rateLimiterRes = await authLimiterFlexible.consume(key);
-    // Calculate exponential backoff delay based on consecutive requests
-    // Starts at 100ms and doubles every request, capped at 10 seconds.
-    const delayMs = Math.min(100 * Math.pow(2, rateLimiterRes.consumedPoints - 1), 10000);
-    
-    if (delayMs > 100) {
-      setTimeout(() => next(), delayMs);
-    } else {
-      next();
-    }
+    await authLimiterFlexible.consume(key);
+    next();
   } catch (rejRes) {
     // Only hit if they exceed 1000 requests in an hour (hard limit fallback)
     res.status(429).json({ message: "Too many authentication attempts, please try again later" });

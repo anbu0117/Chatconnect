@@ -10,6 +10,7 @@ import LoginPage from "./pages/LoginPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import ChatPage from "./pages/ChatPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
+import StoryViewer from "./components/StoryViewer.jsx";
 
 const App = () => {
   const { authUser, checkAuth, isCheckingAuth, socket } = useAuthStore();
@@ -47,6 +48,7 @@ const App = () => {
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
       <Toaster position="top-center" />
+      <StoryViewer />
     </>
   );
 };

@@ -11,7 +11,11 @@ const Navbar = () => {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 px-4 dark:border-neutral-800">
       <Link to="/" className="flex items-center gap-2 font-extrabold tracking-tight">
-        <MessageCircle className="h-5 w-5 text-brand-500" />
+        <img
+          src="/chatconnect-logo.png"
+          alt="ChatConnect Logo"
+          className="h-7 w-7 rounded-lg object-cover shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700"
+        />
         <span>ChatConnect</span>
       </Link>
 

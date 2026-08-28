@@ -18,3 +18,22 @@ export const loginSchema = z.object({
   query: z.object({}).optional(),
   params: z.object({}).optional(),
 });
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+  }).strict(),
+  query: z.object({}).optional(),
+  params: z.object({}).optional(),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    otp: z.string().length(6, "OTP must be 6 digits"),
+    newPassword: z.string().min(6, "New password must be at least 6 characters"),
+  }).strict(),
+  query: z.object({}).optional(),
+  params: z.object({}).optional(),
+});
+

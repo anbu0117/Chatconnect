@@ -33,9 +33,11 @@ const RegisterPage = () => {
     <div className="flex h-screen items-center justify-center bg-surface-light px-4 dark:bg-surface-dark">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/10">
-            <MessageCircle className="h-6 w-6 text-brand-500" />
-          </div>
+          <img
+            src="/chatconnect-logo.png"
+            alt="ChatConnect Logo"
+            className="mx-auto mb-3 h-14 w-14 rounded-2xl object-cover shadow-md ring-1 ring-neutral-200 dark:ring-neutral-700"
+          />
           <h1 className="text-2xl font-extrabold tracking-tight">Create your account</h1>
           <p className="mt-1 text-sm text-neutral-500">Join ChatConnect in a few seconds</p>
         </div>
