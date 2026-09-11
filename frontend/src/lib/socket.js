@@ -1,6 +1,14 @@
 import { io } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.MODE === "development" ? "http://localhost:5001" : "/");
+const rawSocketUrl = import.meta.env.VITE_SOCKET_URL;
+const isPlaceholder =
+  !rawSocketUrl ||
+  rawSocketUrl.includes("your-render-app") ||
+  rawSocketUrl.includes("chatconnect-backend");
+
+const SOCKET_URL = !isPlaceholder
+  ? rawSocketUrl
+  : (import.meta.env.MODE === "development" ? "http://localhost:5001" : "/");
 
 /**
  * Creates (but does not yet connect) a Socket.IO client for the given user.

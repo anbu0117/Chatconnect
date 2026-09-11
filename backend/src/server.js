@@ -32,7 +32,21 @@ const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 
 // ---- Core middleware ----
-app.use(helmet()); // sensible default security headers (CSP, X-Frame-Options, etc.)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", "https:", "wss:", "ws:"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com", "https:"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(apiLimiter);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
