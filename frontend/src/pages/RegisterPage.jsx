@@ -13,6 +13,10 @@ const RegisterPage = () => {
       toast.error("Username must be at least 3 characters");
       return false;
     }
+    if (!/^[a-zA-Z0-9_ .-]+$/.test(form.username)) {
+      toast.error("Username can only contain letters, numbers, spaces, underscores, hyphens, and dots");
+      return false;
+    }
     if (!/^\S+@\S+\.\S+$/.test(form.email)) {
       toast.error("Please enter a valid email");
       return false;
@@ -26,7 +30,13 @@ const RegisterPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (validate()) register(form);
+    if (validate()) {
+      register({
+        username: form.username.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      });
+    }
   };
 
   return (
@@ -51,8 +61,9 @@ const RegisterPage = () => {
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
-              placeholder="alice"
+              placeholder="e.g. Alice or Anbukkumaran A"
             />
+            <p className="mt-1 text-xs text-neutral-400">Letters, numbers, spaces, underscores, hyphens and dots allowed</p>
           </div>
 
           <div>

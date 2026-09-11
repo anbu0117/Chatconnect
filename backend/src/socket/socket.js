@@ -8,10 +8,42 @@ let io;
 // a user could theoretically have multiple tabs/sockets open.
 const userSocketMap = {};
 
+const defaultAllowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+];
+
+const parseClientUrls = (urlStr) => {
+  if (!urlStr) return [];
+  return urlStr
+    .split(",")
+    .map((u) => u.trim().replace(/^["']|["']$/g, "").replace(/\/+$/, ""))
+    .filter(Boolean);
+};
+
+const allowedOrigins = [
+  ...defaultAllowedOrigins,
+  ...parseClientUrls(process.env.CLIENT_URL),
+  ...parseClientUrls(process.env.RENDER_EXTERNAL_URL),
+];
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  const cleanOrigin = origin.trim().replace(/\/+$/, "");
+  return allowedOrigins.includes(cleanOrigin);
+};
+
 export const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:5173",
+      origin: (origin, callback) => {
+        if (!origin || isOriginAllowed(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Not allowed by CORS: ${origin}`));
+      },
       credentials: true,
     },
   });

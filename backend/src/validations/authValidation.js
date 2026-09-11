@@ -2,9 +2,21 @@ import { z } from "zod";
 
 export const registerSchema = z.object({
   body: z.object({
-    username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, "Username can only contain alphanumeric characters and underscores"),
-    email: z.string().email(),
-    password: z.string().min(6).max(128),
+    username: z
+      .string({ required_error: "Username is required" })
+      .min(3, "Username must be at least 3 characters")
+      .max(30, "Username cannot exceed 30 characters")
+      .regex(
+        /^[a-zA-Z0-9_ .-]+$/,
+        "Username can only contain letters, numbers, spaces, underscores, hyphens, and dots"
+      ),
+    email: z
+      .string({ required_error: "Email is required" })
+      .email("Please enter a valid email address"),
+    password: z
+      .string({ required_error: "Password is required" })
+      .min(6, "Password must be at least 6 characters")
+      .max(128, "Password cannot exceed 128 characters"),
   }).strict(),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
@@ -12,8 +24,13 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().email(),
-    password: z.string().min(1).max(128), // Allow shorter passwords for login attempt
+    email: z
+      .string({ required_error: "Email is required" })
+      .email("Please enter a valid email address"),
+    password: z
+      .string({ required_error: "Password is required" })
+      .min(1, "Password is required")
+      .max(128),
   }).strict(),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
@@ -21,7 +38,9 @@ export const loginSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: z
+      .string({ required_error: "Email is required" })
+      .email("Please enter a valid email address"),
   }).strict(),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
@@ -29,7 +48,9 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: z
+      .string({ required_error: "Email is required" })
+      .email("Please enter a valid email address"),
     otp: z.string().length(6, "OTP must be 6 digits"),
     newPassword: z.string().min(6, "New password must be at least 6 characters"),
   }).strict(),

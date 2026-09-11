@@ -1,3 +1,5 @@
+import { ZodError } from "zod";
+
 export const validate = (schema) => (req, res, next) => {
   try {
     schema.parse({
@@ -8,12 +10,14 @@ export const validate = (schema) => (req, res, next) => {
 
     next();
   } catch (err) {
-    if (err.name === "ZodError") {
-      return res.status(400).json({
-        message: err.issues?.[0]?.message || "Validation failed",
+    if (err instanceof ZodError || err.name === "ZodError" || err.issues || err.errors) {
+      const issues = err.issues || err.errors || [];
+      const firstMessage = issues[0]?.message || "Validation failed";
 
-        errors: (err.issues || []).map((e) => ({
-          path: (e.path ?? []).join("."),
+      return res.status(400).json({
+        message: firstMessage,
+        errors: issues.map((e) => ({
+          path: Array.isArray(e.path) ? e.path.join(".") : String(e.path || ""),
           message: e.message,
         })),
       });

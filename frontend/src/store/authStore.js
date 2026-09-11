@@ -3,6 +3,19 @@ import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios.js";
 import { createSocket } from "../lib/socket.js";
 
+const getErrorMessage = (error, defaultMsg) => {
+  if (error.response?.data?.message) {
+    return error.response.data.message;
+  }
+  if (Array.isArray(error.response?.data?.errors) && error.response.data.errors.length > 0) {
+    return error.response.data.errors[0].message;
+  }
+  if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+    return "Cannot connect to server. Please check if the backend is running.";
+  }
+  return error.message || defaultMsg;
+};
+
 export const useAuthStore = create((set, get) => ({
   authUser: null,
   isCheckingAuth: true,
@@ -39,7 +52,7 @@ export const useAuthStore = create((set, get) => ({
       get().connectSocket();
       return true;
     } catch (error) {
-      toast.error(error.response?.data?.message || "Registration failed");
+      toast.error(getErrorMessage(error, "Registration failed"));
       return false;
     } finally {
       set({ isRegistering: false });
@@ -55,7 +68,7 @@ export const useAuthStore = create((set, get) => ({
       get().connectSocket();
       return true;
     } catch (error) {
-      toast.error(error.response?.data?.message || "Login failed");
+      toast.error(getErrorMessage(error, "Login failed"));
       return false;
     } finally {
       set({ isLoggingIn: false });
@@ -69,7 +82,7 @@ export const useAuthStore = create((set, get) => ({
       get().disconnectSocket();
       toast.success("Logged out");
     } catch (error) {
-      toast.error(error.response?.data?.message || "Logout failed");
+      toast.error(getErrorMessage(error, "Logout failed"));
     }
   },
 
@@ -80,7 +93,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success(res.data?.message || "Reset code sent to your email!");
       return { success: true, otp: res.data?.otp };
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to send reset code");
+      toast.error(getErrorMessage(error, "Failed to send reset code"));
       return { success: false };
     } finally {
       set({ isSendingOTP: false });
@@ -94,7 +107,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success(res.data?.message || "Password reset successfully!");
       return true;
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to reset password");
+      toast.error(getErrorMessage(error, "Failed to reset password"));
       return false;
     } finally {
       set({ isResettingPassword: false });

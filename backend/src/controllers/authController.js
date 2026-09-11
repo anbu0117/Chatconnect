@@ -14,16 +14,31 @@ export const register = async (req, res, next) => {
       return res.status(400).json({ message: "Username, email, and password are all required" });
     }
 
+    const trimmedUsername = username.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+
     if (password.length < 6) {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
-    if (existingUser) {
-      return res.status(409).json({ message: "Username or email already in use" });
+    // Check if email or username already exists
+    const existingEmail = await User.findOne({ email: normalizedEmail });
+    if (existingEmail) {
+      return res.status(409).json({ message: "Email is already registered" });
     }
 
-    const user = await User.create({ username, email, password });
+    const existingUsername = await User.findOne({
+      username: { $regex: new RegExp(`^${trimmedUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    });
+    if (existingUsername) {
+      return res.status(409).json({ message: "Username is already taken" });
+    }
+
+    const user = await User.create({
+      username: trimmedUsername,
+      email: normalizedEmail,
+      password,
+    });
 
     generateToken(user._id, res);
 
@@ -83,7 +98,13 @@ export const login = async (req, res, next) => {
  */
 export const logout = async (req, res, next) => {
   try {
-    res.cookie("jwt", "", { maxAge: 0 });
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("jwt", "", {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      maxAge: 0,
+    });
 
     if (req.user?._id) {
       await User.findByIdAndUpdate(req.user._id, {
