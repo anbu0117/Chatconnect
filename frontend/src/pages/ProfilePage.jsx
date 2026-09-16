@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { ArrowLeft, Camera } from "lucide-react";
+import { ArrowLeft, Camera, Eye, EyeOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios.js";
@@ -14,6 +14,8 @@ const ProfilePage = () => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const handleImageSelect = async (e) => {
@@ -135,24 +137,44 @@ const ProfilePage = () => {
       <section>
         <h2 className="mb-3 text-sm font-semibold">Change password</h2>
         <form onSubmit={handlePasswordChange} className="space-y-3">
-          <input
-            type="password"
-            required
-            value={passwordForm.currentPassword}
-            onChange={(e) =>
-              setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
-            }
-            placeholder="Current password"
-            className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
-          />
-          <input
-            type="password"
-            required
-            value={passwordForm.newPassword}
-            onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-            placeholder="New password (min. 6 characters)"
-            className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
-          />
+          <div className="relative">
+            <input
+              type={showCurrentPassword ? "text" : "password"}
+              required
+              value={passwordForm.currentPassword}
+              onChange={(e) =>
+                setPasswordForm({ ...passwordForm, currentPassword: e.target.value })
+              }
+              placeholder="Current password"
+              className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 pr-10 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrentPassword((s) => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition"
+              aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+            >
+              {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <div className="relative">
+            <input
+              type={showNewPassword ? "text" : "password"}
+              required
+              value={passwordForm.newPassword}
+              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+              placeholder="New password (min. 6 characters)"
+              className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2 pr-10 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPassword((s) => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition"
+              aria-label={showNewPassword ? "Hide password" : "Show password"}
+            >
+              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           <button
             type="submit"
             disabled={isChangingPassword}
