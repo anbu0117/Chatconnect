@@ -110,6 +110,9 @@ if (process.env.NODE_ENV === "production") {
   const frontendDist = path.resolve(__dirname, "../../frontend/dist");
   app.use(express.static(frontendDist));
   app.get(/^(?!\/api).*$/, (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.sendFile(path.join(frontendDist, "index.html"));
   });
 }
