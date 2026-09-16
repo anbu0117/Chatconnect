@@ -3,8 +3,9 @@ import axios from "axios";
 const rawApiUrl = import.meta.env.VITE_API_URL;
 const isPlaceholder =
   !rawApiUrl ||
-  rawApiUrl.includes("your-render-app") ||
-  rawApiUrl.includes("chatconnect-backend");
+  rawApiUrl.toLowerCase().includes("your-render-app") ||
+  rawApiUrl.toLowerCase().includes("your-") ||
+  rawApiUrl.toLowerCase().includes("chatconnect-backend");
 
 const API_URL = !isPlaceholder
   ? rawApiUrl

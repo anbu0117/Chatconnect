@@ -3,8 +3,9 @@ import { io } from "socket.io-client";
 const rawSocketUrl = import.meta.env.VITE_SOCKET_URL;
 const isPlaceholder =
   !rawSocketUrl ||
-  rawSocketUrl.includes("your-render-app") ||
-  rawSocketUrl.includes("chatconnect-backend");
+  rawSocketUrl.toLowerCase().includes("your-render-app") ||
+  rawSocketUrl.toLowerCase().includes("your-") ||
+  rawSocketUrl.toLowerCase().includes("chatconnect-backend");
 
 const SOCKET_URL = !isPlaceholder
   ? rawSocketUrl
