@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { generateToken } from "../utils/generateToken.js";
 import { sendEmail } from "../utils/sendEmail.js";
@@ -122,10 +123,30 @@ export const logout = async (req, res, next) => {
 /**
  * GET /api/auth/check
  * Used by the frontend on app load to check whether the httpOnly cookie
- * still represents a valid session, and to fetch the current user.
+ * still represents a valid session. Returns the user object if authenticated,
+ * or null (with 200 OK) if not logged in, avoiding red 401 errors in console.
  */
-export const checkAuth = (req, res) => {
-  res.status(200).json(req.user);
+export const checkAuth = async (req, res) => {
+  try {
+    const token = req.cookies?.jwt;
+    if (!token) {
+      return res.status(200).json(null);
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!decoded?.userId) {
+      return res.status(200).json(null);
+    }
+
+    const user = await User.findById(decoded.userId).select("-password");
+    if (!user) {
+      return res.status(200).json(null);
+    }
+
+    return res.status(200).json(user);
+  } catch {
+    return res.status(200).json(null);
+  }
 };
 
 /**

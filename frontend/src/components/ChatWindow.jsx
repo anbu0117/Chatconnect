@@ -22,21 +22,15 @@ const ChatWindow = () => {
   const { onlineUsers, authUser, socket } = useAuthStore();
   const bottomRef = useRef(null);
 
-  // Find (or lazily rely on backend to create) the conversation for this pair.
-  // We fetch messages by conversationId once the backend returns it via
-  // getConversations; for a freshly-started chat there may be no history yet.
-  const { conversations } = useChatStore();
-  const conversation = conversations.find((c) =>
-    c.participants.some((p) => p._id === selectedUser?._id)
-  );
-
+  // Fetch messages directly for the active selected contact.
+  // Backend automatically resolves conversationId or userId seamlessly.
   useEffect(() => {
-    if (conversation?._id) {
-      getMessages(conversation._id);
+    if (selectedUser?._id) {
+      getMessages(selectedUser._id);
     } else {
       useChatStore.setState({ messages: [] });
     }
-  }, [selectedUser?._id, conversation?._id]);
+  }, [selectedUser?._id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

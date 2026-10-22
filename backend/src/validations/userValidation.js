@@ -2,8 +2,10 @@ import { z } from "zod";
 
 export const updateProfileSchema = z.object({
   body: z.object({
-    bio: z.string().max(160).optional(),
-  }).strict(),
+    username: z.string().trim().min(3, "Username must be at least 3 characters").max(30, "Username cannot exceed 30 characters").optional(),
+    bio: z.string().max(160, "Bio cannot exceed 160 characters").optional(),
+    profileImage: z.string().optional(),
+  }),
   query: z.object({}).optional(),
   params: z.object({}).optional(),
 });

@@ -10,7 +10,7 @@ const router = express.Router();
 router.post("/register", authLimiter, validate(registerSchema), register);
 router.post("/login", authLimiter, validate(loginSchema), login);
 router.post("/logout", logout);
-router.get("/check", protectRoute, checkAuth);
+router.get("/check", checkAuth);
 router.post("/forgot-password", authLimiter, validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", authLimiter, validate(resetPasswordSchema), resetPassword);
 

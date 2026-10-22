@@ -1,17 +1,27 @@
 import axios from "axios";
 
-const rawApiUrl = import.meta.env.VITE_API_URL;
-const isPlaceholder =
-  !rawApiUrl ||
-  rawApiUrl.toLowerCase().includes("your-render-app") ||
-  rawApiUrl.toLowerCase().includes("your-") ||
-  rawApiUrl.toLowerCase().includes("chatconnect-backend");
+/**
+ * Resolves the backend API base URL:
+ * - Development: uses relative "/api" (proxied by Vite to http://localhost:5001)
+ * - Production: uses VITE_API_URL (e.g. https://chatconnect-backend.onrender.com/api)
+ *   If omitted, falls back to "/api" (same-origin or Netlify/Render proxy)
+ */
+const getBaseApiUrl = () => {
+  if (import.meta.env.MODE === "development") {
+    return "/api";
+  }
 
-const API_URL = !isPlaceholder
-  ? rawApiUrl
-  : (import.meta.env.MODE === "development" ? "http://localhost:5001/api" : "/api");
+  const raw = import.meta.env.VITE_API_URL;
+  if (!raw || raw.includes("your-render-app") || raw.includes("your-backend")) {
+    return "/api";
+  }
+
+  const cleaned = raw.trim().replace(/\/+$/, "");
+  return cleaned.endsWith("/api") ? cleaned : `${cleaned}/api`;
+};
 
 export const axiosInstance = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // send the httpOnly JWT cookie on every request
+  baseURL: getBaseApiUrl(),
+  withCredentials: true, // send httpOnly JWT cookies on every request
 });
+

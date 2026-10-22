@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import { uploadBufferToCloudinary } from "../utils/cloudinaryUpload.js";
+import { getIO } from "../socket/socket.js";
 
 /**
  * GET /api/users?search=alice
@@ -27,29 +28,61 @@ export const getUsers = async (req, res, next) => {
 
 /**
  * PUT /api/users/profile
- * Updates bio and/or profile image. Image comes in as multipart/form-data
- * via multer (memory storage) and is streamed to Cloudinary.
+ * Updates username, bio, and/or profile image.
+ * Supports multipart file upload (Cloudinary + base64 fallback) or preset URL.
  */
 export const updateProfile = async (req, res, next) => {
   try {
     const updates = {};
 
+    if (req.body.username && req.body.username.trim()) {
+      const trimmedUsername = req.body.username.trim();
+      if (trimmedUsername.length < 3 || trimmedUsername.length > 30) {
+        return res.status(400).json({ message: "Username must be between 3 and 30 characters" });
+      }
+      if (trimmedUsername !== req.user.username) {
+        const existing = await User.findOne({
+          username: { $regex: new RegExp(`^${trimmedUsername}$`, "i") },
+          _id: { $ne: req.user._id },
+        });
+        if (existing) {
+          return res.status(409).json({ message: "Username is already taken" });
+        }
+        updates.username = trimmedUsername;
+      }
+    }
+
     if (typeof req.body.bio === "string") {
-      updates.bio = req.body.bio.slice(0, 160);
+      updates.bio = req.body.bio.trim().slice(0, 160);
     }
 
     if (req.file) {
-      const result = await uploadBufferToCloudinary(
-        req.file.buffer,
-        "chatconnect/profile_images"
-      );
-      updates.profileImage = result.secure_url;
+      try {
+        const result = await uploadBufferToCloudinary(
+          req.file.buffer,
+          "chatconnect/profile_images"
+        );
+        updates.profileImage = result.secure_url;
+      } catch (uploadErr) {
+        console.warn("[Cloudinary] Upload failed, falling back to base64 data URI:", uploadErr.message);
+        const mimeType = req.file.mimetype || "image/jpeg";
+        updates.profileImage = `data:${mimeType};base64,${req.file.buffer.toString("base64")}`;
+      }
+    } else if (typeof req.body.profileImage === "string" && req.body.profileImage.trim()) {
+      updates.profileImage = req.body.profileImage.trim();
     }
 
     const user = await User.findByIdAndUpdate(req.user._id, updates, {
       new: true,
       runValidators: true,
     }).select("-password");
+
+    // Broadcast updated profile in real time to connected users
+    try {
+      getIO().emit("userProfileUpdated", user);
+    } catch (socketErr) {
+      // Socket not ready or no clients
+    }
 
     res.status(200).json(user);
   } catch (error) {

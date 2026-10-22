@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -103,17 +104,23 @@ app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/stories", storyRoutes);
 
-// ---- Serve frontend build in production (optional, single-service deploy) ----
-if (process.env.NODE_ENV === "production") {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const frontendDist = path.resolve(__dirname, "../../frontend/dist");
+// ---- Serve frontend build if present (for single-service deploy or direct browser access) ----
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDist = path.resolve(__dirname, "../../frontend/dist");
+const indexHtmlPath = path.join(frontendDist, "index.html");
+
+if (fs.existsSync(indexHtmlPath)) {
   app.use(express.static(frontendDist));
-  app.get(/^(?!\/api).*$/, (req, res) => {
+  app.get("*", (req, res, next) => {
+    // Let API routes pass through to 404 handler
+    if (req.originalUrl.startsWith("/api")) {
+      return next();
+    }
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
-    res.sendFile(path.join(frontendDist, "index.html"));
+    res.sendFile(indexHtmlPath);
   });
 }
 

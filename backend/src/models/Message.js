@@ -26,10 +26,22 @@ const messageSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    isForwarded: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: ["sent", "delivered", "seen"],
       default: "sent",
+    },
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }

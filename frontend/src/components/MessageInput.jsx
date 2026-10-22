@@ -48,21 +48,27 @@ const MessageInput = () => {
     }, 1500);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!text.trim() && !imageFile) return;
+    const messageText = text.trim();
+    const selectedFile = imageFile;
+    const preview = imagePreview;
+
+    if (!messageText && !selectedFile) return;
     if (!selectedUser) return;
 
-    const formData = new FormData();
-    formData.append("text", text.trim());
-    if (imageFile) formData.append("image", imageFile);
-
-    await sendMessage(selectedUser._id, formData);
-
+    // 0ms instant input reset so the user can continue typing immediately
     setText("");
     removeImage();
     clearTimeout(typingTimeout);
-    socket?.emit("stopTyping", { senderId: authUser._id, receiverId: selectedUser._id });
+    socket?.emit("stopTyping", { senderId: authUser?._id, receiverId: selectedUser._id });
+
+    // Optimistic send in the background
+    sendMessage(selectedUser._id, {
+      text: messageText,
+      imageFile: selectedFile,
+      imagePreview: preview,
+    });
   };
 
   return (

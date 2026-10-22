@@ -18,9 +18,9 @@ export const authLimiter = async (req, res, next) => {
   }
 };
 
-// Global API Limiter: Moderate limits for public endpoints
+// Global API Limiter: Generous limits so high-speed chatting is never throttled
 const apiLimiterFlexible = new RateLimiterMemory({
-  points: parseInt(process.env.API_RATE_LIMIT_POINTS) || 100, // 100 requests
+  points: parseInt(process.env.API_RATE_LIMIT_POINTS) || 2000, // 2000 requests
   duration: parseInt(process.env.API_RATE_LIMIT_DURATION) || 15 * 60, // per 15 minutes
 });
 
@@ -34,7 +34,7 @@ export const apiLimiter = (req, res, next) => {
 
 // Authenticated Actions Limiter: Looser limits
 const userActionLimiterFlexible = new RateLimiterMemory({
-  points: parseInt(process.env.USER_RATE_LIMIT_POINTS) || 500, // 500 requests
+  points: parseInt(process.env.USER_RATE_LIMIT_POINTS) || 5000, // 5000 requests
   duration: parseInt(process.env.USER_RATE_LIMIT_DURATION) || 15 * 60, // per 15 minutes
 });
 
