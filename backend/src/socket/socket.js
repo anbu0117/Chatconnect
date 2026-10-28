@@ -40,7 +40,11 @@ const allowedOrigins = [
 const isOriginAllowed = (origin) => {
   if (!origin) return true;
   const cleanOrigin = origin.trim().replace(/\/+$/, "");
-  return allowedOrigins.includes(cleanOrigin);
+  if (allowedOrigins.includes(cleanOrigin)) return true;
+  if (/^https:\/\/.*\.onrender\.com$/.test(cleanOrigin)) return true;
+  if (/^https:\/\/.*\.netlify\.app$/.test(cleanOrigin)) return true;
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)) return true;
+  return false;
 };
 
 export const initSocket = (httpServer) => {

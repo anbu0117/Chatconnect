@@ -25,3 +25,12 @@ export const axiosInstance = axios.create({
   withCredentials: true, // send httpOnly JWT cookies on every request
 });
 
+// Attach Authorization Bearer token header if token is stored in localStorage
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem("chatconnect_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+

@@ -34,11 +34,15 @@ export const useAuthStore = create((set, get) => ({
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
-      set({ authUser: res.data || null });
-      if (res.data) {
+      if (res.data && res.data._id) {
+        set({ authUser: res.data });
         get().connectSocket();
+      } else {
+        localStorage.removeItem("chatconnect_token");
+        set({ authUser: null });
       }
     } catch {
+      localStorage.removeItem("chatconnect_token");
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });
@@ -49,6 +53,12 @@ export const useAuthStore = create((set, get) => ({
     set({ isRegistering: true });
     try {
       const res = await axiosInstance.post("/auth/register", formData);
+      if (!res.data || !res.data._id) {
+        throw new Error("Invalid response received from server. Please verify backend connection.");
+      }
+      if (res.data.token) {
+        localStorage.setItem("chatconnect_token", res.data.token);
+      }
       set({ authUser: res.data });
       toast.success("Account created!");
       get().connectSocket();
@@ -65,6 +75,12 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoggingIn: true });
     try {
       const res = await axiosInstance.post("/auth/login", formData);
+      if (!res.data || !res.data._id) {
+        throw new Error("Invalid response received from server. Please verify backend connection.");
+      }
+      if (res.data.token) {
+        localStorage.setItem("chatconnect_token", res.data.token);
+      }
       set({ authUser: res.data });
       toast.success("Welcome back!");
       get().connectSocket();
@@ -80,11 +96,13 @@ export const useAuthStore = create((set, get) => ({
   logout: async () => {
     try {
       await axiosInstance.post("/auth/logout");
+    } catch (error) {
+      console.warn("Logout request failed:", error);
+    } finally {
+      localStorage.removeItem("chatconnect_token");
       set({ authUser: null });
       get().disconnectSocket();
       toast.success("Logged out");
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Logout failed"));
     }
   },
 

@@ -29,9 +29,11 @@ const getSocketUrl = () => {
  * autoConnect is false so the caller (authStore) controls exactly when the
  * socket connects/disconnects in step with login/logout.
  */
-export const createSocket = (userId) =>
-  io(SOCKET_URL, {
+export const createSocket = (userId) => {
+  const token = localStorage.getItem("chatconnect_token");
+  return io(SOCKET_URL, {
     query: { userId },
+    auth: { token },
     withCredentials: true,
     transports: ["websocket", "polling"],
     autoConnect: false,
@@ -41,3 +43,4 @@ export const createSocket = (userId) =>
     reconnectionDelayMax: 2000,
     timeout: 10000,
   });
+};

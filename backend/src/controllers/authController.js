@@ -41,7 +41,7 @@ export const register = async (req, res, next) => {
       password,
     });
 
-    generateToken(user._id, res);
+    const token = generateToken(user._id, res);
 
     return res.status(201).json({
       _id: user._id,
@@ -49,6 +49,7 @@ export const register = async (req, res, next) => {
       email: user.email,
       profileImage: user.profileImage,
       bio: user.bio,
+      token,
     });
   } catch (error) {
     next(error);
@@ -76,7 +77,7 @@ export const login = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    generateToken(user._id, res);
+    const token = generateToken(user._id, res);
 
     user.isOnline = true;
     await user.save();
@@ -87,6 +88,7 @@ export const login = async (req, res, next) => {
       email: user.email,
       profileImage: user.profileImage,
       bio: user.bio,
+      token,
     });
   } catch (error) {
     next(error);
