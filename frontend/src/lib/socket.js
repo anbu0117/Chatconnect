@@ -24,6 +24,8 @@ const getSocketUrl = () => {
   return "/";
 };
 
+const SOCKET_URL = getSocketUrl();
+
 /**
  * Creates (but does not yet connect) a Socket.IO client for the given user.
  * autoConnect is false so the caller (authStore) controls exactly when the

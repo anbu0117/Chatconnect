@@ -32,6 +32,7 @@ for (const secret of requiredSecrets) {
 }
 
 const app = express();
+app.set("trust proxy", 1); // Trust Render / reverse-proxy SSL headers
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5001;
 

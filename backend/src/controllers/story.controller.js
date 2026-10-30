@@ -19,12 +19,22 @@ export const createStory = async (req, res, next) => {
     const isVideo = req.file.mimetype.startsWith("video/");
     const mediaType = isVideo ? "video" : "image";
 
-    // Upload to Cloudinary with auto resource_type so it handles videos properly
-    const result = await uploadBufferToCloudinary(req.file.buffer, "chatconnect/stories", "auto");
+    let mediaUrl = "";
+
+    try {
+      // Upload to Cloudinary with auto resource_type so it handles videos properly
+      const result = await uploadBufferToCloudinary(req.file.buffer, "chatconnect/stories", "auto");
+      mediaUrl = result.secure_url;
+    } catch (uploadErr) {
+      console.warn("[Story Upload] Cloudinary upload unavailable, falling back to data URI:", uploadErr.message);
+      // Seamless fallback to base64 data URI so user is never blocked
+      const mimeType = req.file.mimetype || (isVideo ? "video/mp4" : "image/jpeg");
+      mediaUrl = `data:${mimeType};base64,${req.file.buffer.toString("base64")}`;
+    }
 
     const story = await Story.create({
       userId,
-      mediaUrl: result.secure_url,
+      mediaUrl,
       mediaType,
       caption: caption || "",
       viewers: [],

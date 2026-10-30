@@ -28,7 +28,7 @@ const App = () => {
     return () => unsubscribeFromSocketEvents();
   }, [socket]);
 
-  if (isCheckingAuth) {
+  if (isCheckingAuth && !authUser) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-light dark:bg-surface-dark">
         <Loader className="h-8 w-8 animate-spin text-brand-500" />

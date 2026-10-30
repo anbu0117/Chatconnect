@@ -16,8 +16,19 @@ const getErrorMessage = (error, defaultMsg) => {
   return error.message || defaultMsg;
 };
 
+const getInitialUser = () => {
+  try {
+    const token = localStorage.getItem("chatconnect_token");
+    const userStr = localStorage.getItem("chatconnect_user");
+    if (token && userStr) {
+      return JSON.parse(userStr);
+    }
+  } catch {}
+  return null;
+};
+
 export const useAuthStore = create((set, get) => ({
-  authUser: null,
+  authUser: getInitialUser(),
   isCheckingAuth: true,
   isLoggingIn: false,
   isRegistering: false,
@@ -27,22 +38,30 @@ export const useAuthStore = create((set, get) => ({
   socket: null,
 
   /**
-   * Called once on app load to see if the httpOnly cookie still
-   * represents a valid session, so refreshing the page doesn't log
-   * the user out.
+   * Called once on app load to verify session via cookie or Authorization header.
    */
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
       if (res.data && res.data._id) {
+        if (res.data.token) {
+          localStorage.setItem("chatconnect_token", res.data.token);
+        }
+        localStorage.setItem("chatconnect_user", JSON.stringify(res.data));
         set({ authUser: res.data });
-        get().connectSocket();
+        try {
+          get().connectSocket();
+        } catch (socketErr) {
+          console.warn("Socket connection failed on checkAuth:", socketErr);
+        }
       } else {
         localStorage.removeItem("chatconnect_token");
+        localStorage.removeItem("chatconnect_user");
         set({ authUser: null });
       }
     } catch {
       localStorage.removeItem("chatconnect_token");
+      localStorage.removeItem("chatconnect_user");
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });
@@ -59,9 +78,14 @@ export const useAuthStore = create((set, get) => ({
       if (res.data.token) {
         localStorage.setItem("chatconnect_token", res.data.token);
       }
+      localStorage.setItem("chatconnect_user", JSON.stringify(res.data));
       set({ authUser: res.data });
       toast.success("Account created!");
-      get().connectSocket();
+      try {
+        get().connectSocket();
+      } catch (socketErr) {
+        console.warn("Socket connection failed on register:", socketErr);
+      }
       return true;
     } catch (error) {
       toast.error(getErrorMessage(error, "Registration failed"));
@@ -81,9 +105,14 @@ export const useAuthStore = create((set, get) => ({
       if (res.data.token) {
         localStorage.setItem("chatconnect_token", res.data.token);
       }
+      localStorage.setItem("chatconnect_user", JSON.stringify(res.data));
       set({ authUser: res.data });
       toast.success("Welcome back!");
-      get().connectSocket();
+      try {
+        get().connectSocket();
+      } catch (socketErr) {
+        console.warn("Socket connection failed on login:", socketErr);
+      }
       return true;
     } catch (error) {
       toast.error(getErrorMessage(error, "Login failed"));
@@ -100,6 +129,7 @@ export const useAuthStore = create((set, get) => ({
       console.warn("Logout request failed:", error);
     } finally {
       localStorage.removeItem("chatconnect_token");
+      localStorage.removeItem("chatconnect_user");
       set({ authUser: null });
       get().disconnectSocket();
       toast.success("Logged out");
@@ -134,7 +164,12 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  updateProfileInStore: (updatedUser) => set({ authUser: updatedUser }),
+  updateProfileInStore: (updatedUser) => {
+    const current = get().authUser;
+    const merged = { ...current, ...updatedUser };
+    localStorage.setItem("chatconnect_user", JSON.stringify(merged));
+    set({ authUser: merged });
+  },
 
   connectSocket: () => {
     const { authUser, socket } = get();

@@ -101,20 +101,36 @@ export const login = async (req, res, next) => {
  */
 export const logout = async (req, res, next) => {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const authHeader = req.headers.authorization;
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+    const token = req.cookies?.jwt || bearerToken;
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded?.userId) {
+          await User.findByIdAndUpdate(decoded.userId, {
+            isOnline: false,
+            lastSeen: new Date(),
+          });
+        }
+      } catch {}
+    } else if (req.user?._id) {
+      await User.findByIdAndUpdate(req.user._id, {
+        isOnline: false,
+        lastSeen: new Date(),
+      });
+    }
+
+    const isProduction =
+      process.env.NODE_ENV === "production" || process.env.RENDER === "true";
     res.cookie("jwt", "", {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "none" : "lax",
       maxAge: 0,
     });
-
-    if (req.user?._id) {
-      await User.findByIdAndUpdate(req.user._id, {
-        isOnline: false,
-        lastSeen: new Date(),
-      });
-    }
 
     return res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
@@ -124,13 +140,17 @@ export const logout = async (req, res, next) => {
 
 /**
  * GET /api/auth/check
- * Used by the frontend on app load to check whether the httpOnly cookie
- * still represents a valid session. Returns the user object if authenticated,
- * or null (with 200 OK) if not logged in, avoiding red 401 errors in console.
+ * Used by the frontend on app load to check whether the session is valid
+ * using either the httpOnly cookie or the Bearer token header.
+ * Returns the user object if authenticated, or null (with 200 OK) if not logged in.
  */
 export const checkAuth = async (req, res) => {
   try {
-    const token = req.cookies?.jwt;
+    const authHeader = req.headers.authorization;
+    const bearerToken =
+      authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+    const token = req.cookies?.jwt || bearerToken;
+
     if (!token) {
       return res.status(200).json(null);
     }
@@ -145,7 +165,15 @@ export const checkAuth = async (req, res) => {
       return res.status(200).json(null);
     }
 
-    return res.status(200).json(user);
+    return res.status(200).json({
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      profileImage: user.profileImage,
+      bio: user.bio,
+      isOnline: user.isOnline,
+      token,
+    });
   } catch {
     return res.status(200).json(null);
   }

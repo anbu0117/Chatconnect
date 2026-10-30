@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
@@ -11,16 +12,18 @@ import {
 
 let io;
 
-// Maps userId -> socketId so we can target a specific user's socket
-// (e.g. to deliver a new message or a typing indicator) even though
-// a user could theoretically have multiple tabs/sockets open.
-const userSocketMap = {};
+// Maps userId -> Set of socketIds so users with multiple tabs/devices stay online
+// and receive notifications on every open session seamlessly.
+const userSocketMap = new Map();
 
 const defaultAllowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
   "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
 ];
 
 const parseClientUrls = (urlStr) => {
@@ -64,43 +67,58 @@ export const initSocket = (httpServer) => {
   });
 
   io.on("connection", (socket) => {
-    const userId = socket.handshake.query.userId;
+    let userId = socket.handshake.query?.userId || socket.handshake.auth?.userId;
 
-    if (userId && userId !== "undefined") {
-      userSocketMap[userId] = socket.id;
-      socket.userId = userId;
-      console.log(`[Socket] User ${userId} connected (${socket.id})`);
+    // Resilient fallback: extract userId from auth token if query is missing
+    if (!userId || userId === "undefined" || userId === "null") {
+      const token = socket.handshake.auth?.token;
+      if (token && process.env.JWT_SECRET) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          if (decoded?.userId) userId = String(decoded.userId);
+        } catch {}
+      }
+    }
 
-      // Mark the user online and broadcast the updated online list
-      User.findByIdAndUpdate(userId, { isOnline: true }).catch((err) =>
+    if (userId && userId !== "undefined" && userId !== "null") {
+      const strUserId = String(userId);
+      socket.userId = strUserId;
+
+      if (!userSocketMap.has(strUserId)) {
+        userSocketMap.set(strUserId, new Set());
+      }
+      userSocketMap.get(strUserId).add(socket.id);
+
+      // Join room for multi-device/multi-tab synchronized delivery
+      socket.join(strUserId);
+      console.log(`[Socket] User ${strUserId} connected (${socket.id}). Active sockets: ${userSocketMap.get(strUserId).size}`);
+
+      // Mark the user online in DB
+      User.findByIdAndUpdate(strUserId, { isOnline: true }).catch((err) =>
         console.error("[Socket] Failed to set isOnline:", err.message)
       );
     }
 
-    io.emit("getOnlineUsers", Object.keys(userSocketMap));
+    // Broadcast current online user list to all connected clients
+    io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
 
     // ---- Typing indicators ----
     socket.on("typing", ({ receiverId, senderId }) => {
-      const receiverSocketId = userSocketMap[receiverId];
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("typing", { senderId });
+      if (receiverId) {
+        io.to(String(receiverId)).emit("typing", { senderId });
       }
     });
 
     socket.on("stopTyping", ({ receiverId, senderId }) => {
-      const receiverSocketId = userSocketMap[receiverId];
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("stopTyping", { senderId });
+      if (receiverId) {
+        io.to(String(receiverId)).emit("stopTyping", { senderId });
       }
     });
 
     // ---- Read receipts ----
-    // Client emits this when the receiver views a message; we relay it
-    // back to the original sender so their UI can flip the tick to "seen".
     socket.on("messageSeen", ({ messageId, senderId }) => {
-      const senderSocketId = userSocketMap[senderId];
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("messageSeen", { messageId });
+      if (senderId) {
+        io.to(String(senderId)).emit("messageSeen", { messageId });
       }
     });
 
@@ -121,10 +139,8 @@ export const initSocket = (httpServer) => {
         message.editedAt = new Date();
         await message.save();
 
-        const receiverSocketId = userSocketMap[message.receiverId.toString()];
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit("messageEdited", message);
-        }
+        // Emit to all sockets of receiver via user room
+        io.to(message.receiverId.toString()).emit("messageEdited", message);
 
         ack?.({ success: true, message });
       } catch (err) {
@@ -158,10 +174,8 @@ export const initSocket = (httpServer) => {
           await conversation.save();
         }
 
-        const receiverSocketId = userSocketMap[receiverId];
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit("messageDeleted", { messageId, conversationId });
-        }
+        // Emit to all sockets of receiver via user room
+        io.to(receiverId).emit("messageDeleted", { messageId, conversationId });
 
         ack?.({ success: true, messageId, conversationId });
       } catch (err) {
@@ -180,23 +194,23 @@ export const initSocket = (httpServer) => {
           return ack?.({ error: "Message must contain text or image" });
         }
 
-        const receiverSocketId = userSocketMap[receiverId];
-        const isReceiverOnline = Boolean(receiverSocketId);
+        const strReceiverId = String(receiverId);
+        const isReceiverOnline = userSocketMap.has(strReceiverId);
 
         // Pre-create message ID for zero-latency dispatch
         const messageId = new mongoose.Types.ObjectId();
 
         // 0ms In-Memory conversation resolution
-        let conversationId = getCachedConversationId(senderId, receiverId);
+        let conversationId = getCachedConversationId(senderId, strReceiverId);
         if (!conversationId) {
-          conversationId = await getOrFindConversationId(senderId, receiverId);
+          conversationId = await getOrFindConversationId(senderId, strReceiverId);
         }
 
         const messageDoc = {
           _id: messageId,
           conversationId,
           senderId,
-          receiverId,
+          receiverId: strReceiverId,
           text: text ? String(text).trim() : "",
           imageUrl: imageUrl || "",
           isForwarded: Boolean(data?.isForwarded),
@@ -204,9 +218,9 @@ export const initSocket = (httpServer) => {
           createdAt: new Date().toISOString(),
         };
 
-        // 1. INSTANT real-time delivery to receiver (<2ms)
+        // 1. INSTANT real-time delivery to receiver (<2ms) via user room
         if (isReceiverOnline) {
-          io.to(receiverSocketId).emit("newMessage", messageDoc);
+          io.to(strReceiverId).emit("newMessage", messageDoc);
         }
 
         // 2. INSTANT confirmation acknowledgment to sender (<2ms)
@@ -230,29 +244,38 @@ export const initSocket = (httpServer) => {
 
     // ---- Disconnect ----
     socket.on("disconnect", async () => {
-      console.log(`[Socket] User ${userId} disconnected (${socket.id})`);
+      const strUserId = socket.userId;
+      console.log(`[Socket] User ${strUserId} disconnected (${socket.id})`);
 
-      if (userId && userSocketMap[userId] === socket.id) {
-        delete userSocketMap[userId];
-
-        try {
-          await User.findByIdAndUpdate(userId, {
-            isOnline: false,
-            lastSeen: new Date(),
-          });
-        } catch (err) {
-          console.error("[Socket] Failed to update lastSeen:", err.message);
+      if (strUserId && userSocketMap.has(strUserId)) {
+        const sockets = userSocketMap.get(strUserId);
+        sockets.delete(socket.id);
+        // Only mark offline if user has no remaining open tabs/windows
+        if (sockets.size === 0) {
+          userSocketMap.delete(strUserId);
+          try {
+            await User.findByIdAndUpdate(strUserId, {
+              isOnline: false,
+              lastSeen: new Date(),
+            });
+          } catch (err) {
+            console.error("[Socket] Failed to update lastSeen:", err.message);
+          }
         }
       }
 
-      io.emit("getOnlineUsers", Object.keys(userSocketMap));
+      // Broadcast fresh online users list to all clients
+      io.emit("getOnlineUsers", Array.from(userSocketMap.keys()));
     });
   });
 
   return io;
 };
 
-export const getReceiverSocketId = (userId) => userSocketMap[userId];
+export const getReceiverSocketId = (userId) => {
+  const sockets = userSocketMap.get(String(userId));
+  return sockets && sockets.size > 0 ? Array.from(sockets)[0] : null;
+};
 
 export const getIO = () => {
   if (!io) throw new Error("Socket.IO not initialized. Call initSocket(httpServer) first.");
