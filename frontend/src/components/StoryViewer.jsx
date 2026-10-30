@@ -88,8 +88,19 @@ const StoryViewer = () => {
     return null;
   }
 
+  // Pause/play video element when isPaused state changes
+  useEffect(() => {
+    if (currentStory?.mediaType === "video" && videoRef.current) {
+      if (isPaused) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  }, [isPaused, currentStory?.mediaType]);
+
   const handleVideoTimeUpdate = () => {
-    if (videoRef.current) {
+    if (videoRef.current && videoRef.current.duration) {
       const p = (videoRef.current.currentTime / videoRef.current.duration) * 100;
       setProgress(p);
     }
@@ -155,8 +166,25 @@ const StoryViewer = () => {
             </div>
           </div>
           <div className="flex items-center gap-4 text-white">
-            {isPaused ? <Play size={20} /> : <Pause size={20} />}
-            <button onClick={closeStoryViewer} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPaused((prev) => !prev);
+              }}
+              className="p-1 hover:bg-white/10 rounded-full transition-colors"
+              title={isPaused ? "Play" : "Pause"}
+            >
+              {isPaused ? <Play size={20} /> : <Pause size={20} />}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeStoryViewer();
+              }}
+              className="p-1 hover:bg-white/10 rounded-full transition-colors"
+            >
               <X size={24} />
             </button>
           </div>

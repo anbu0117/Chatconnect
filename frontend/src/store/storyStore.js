@@ -48,7 +48,33 @@ export const useStoryStore = create((set, get) => ({
   viewStory: async (storyId) => {
     try {
       await axiosInstance.post(`/stories/${storyId}/view`);
-      // Optionally update the local state to reflect it's been viewed
+      // Update local state so viewed status updates immediately in the UI
+      const { stories } = get();
+      const authUserStr = localStorage.getItem("chatconnect_user");
+      const currentAuthUser = authUserStr ? JSON.parse(authUserStr) : null;
+      if (currentAuthUser?._id) {
+        const updatedStories = stories.map((group) => ({
+          ...group,
+          stories: group.stories.map((story) => {
+            if (story._id === storyId) {
+              const alreadyViewed = story.viewers?.some(
+                (v) => (v.userId?._id || v.userId) === currentAuthUser._id
+              );
+              if (!alreadyViewed) {
+                return {
+                  ...story,
+                  viewers: [
+                    ...(story.viewers || []),
+                    { userId: currentAuthUser._id, viewedAt: new Date().toISOString() },
+                  ],
+                };
+              }
+            }
+            return story;
+          }),
+        }));
+        set({ stories: updatedStories });
+      }
     } catch (error) {
       console.error("Failed to mark story as viewed:", error);
     }

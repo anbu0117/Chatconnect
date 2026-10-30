@@ -104,15 +104,26 @@ const StoryStrip = () => {
         // Skip current user as we rendered them first
         if (storyGroup.user._id === authUser._id) return null;
 
-        // Check if all stories are viewed by this user (we could color the ring gray if all viewed)
-        // For simplicity right now, any active story group gets a colorful ring
+        const allViewed =
+          Array.isArray(storyGroup.stories) &&
+          storyGroup.stories.length > 0 &&
+          storyGroup.stories.every((s) =>
+            s.viewers?.some((v) => (v.userId?._id || v.userId) === authUser._id)
+          );
+
         return (
           <div 
             key={storyGroup.user._id} 
             className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer"
             onClick={() => openStoryViewer(index, 0)}
           >
-            <div className="w-14 h-14 rounded-full p-[2px] bg-gradient-to-tr from-yellow-400 to-fuchsia-600">
+            <div
+              className={`w-14 h-14 rounded-full p-[2px] transition-all duration-300 ${
+                allViewed
+                  ? "bg-base-300 dark:bg-base-700"
+                  : "bg-gradient-to-tr from-yellow-400 to-fuchsia-600"
+              }`}
+            >
               <img
                 src={storyGroup.user.profileImage || "/avatar.png"}
                 alt={storyGroup.user.username}
