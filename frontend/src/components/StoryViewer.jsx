@@ -72,23 +72,15 @@ const StoryViewer = () => {
     return () => clearInterval(intervalId);
   }, [isStoryViewerOpen, isPaused, activeUserIndex, activeStoryIndex, stories, nextStory]);
 
-  if (!isStoryViewerOpen || activeUserIndex === null || activeStoryIndex === null) return null;
+  const currentStoryGroup =
+    activeUserIndex !== null && stories[activeUserIndex] ? stories[activeUserIndex] : null;
+  const userStories = currentStoryGroup?.stories || [];
+  const currentStory =
+    activeStoryIndex !== null && userStories[activeStoryIndex]
+      ? userStories[activeStoryIndex]
+      : null;
 
-  const currentStoryGroup = stories[activeUserIndex];
-  if (!currentStoryGroup) {
-    closeStoryViewer();
-    return null;
-  }
-
-  const userStories = currentStoryGroup.stories;
-  const currentStory = userStories[activeStoryIndex];
-
-  if (!currentStory) {
-    closeStoryViewer();
-    return null;
-  }
-
-  // Pause/play video element when isPaused state changes
+  // Pause/play video element when isPaused state changes (must be called unconditionally before returns)
   useEffect(() => {
     if (currentStory?.mediaType === "video" && videoRef.current) {
       if (isPaused) {
@@ -98,6 +90,18 @@ const StoryViewer = () => {
       }
     }
   }, [isPaused, currentStory?.mediaType]);
+
+  if (!isStoryViewerOpen || activeUserIndex === null || activeStoryIndex === null) return null;
+
+  if (!currentStoryGroup) {
+    closeStoryViewer();
+    return null;
+  }
+
+  if (!currentStory) {
+    closeStoryViewer();
+    return null;
+  }
 
   const handleVideoTimeUpdate = () => {
     if (videoRef.current && videoRef.current.duration) {
