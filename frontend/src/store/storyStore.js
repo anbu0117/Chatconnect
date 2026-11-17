@@ -137,4 +137,137 @@ export const useStoryStore = create((set, get) => ({
       set({ activeStoryIndex: 0 });
     }
   },
+
+  toggleLike: async (storyId, currentUserId) => {
+    if (!currentUserId || !storyId) return;
+
+    const previousStories = get().stories;
+
+    // Check whether current user currently liked this story
+    let isCurrentlyLiked = false;
+    for (const group of previousStories) {
+      const foundStory = group.stories?.find((s) => s._id === storyId);
+      if (foundStory) {
+        isCurrentlyLiked = (foundStory.likes || []).some(
+          (like) => (like?._id || like)?.toString() === currentUserId.toString()
+        );
+        break;
+      }
+    }
+
+    const willLike = !isCurrentlyLiked;
+
+    // 1. Optimistic Update immediately in UI
+    const updatedStories = previousStories.map((group) => ({
+      ...group,
+      stories: group.stories.map((story) => {
+        if (story._id === storyId) {
+          const currentLikes = story.likes || [];
+          let nextLikes;
+          if (willLike) {
+            const alreadyIn = currentLikes.some(
+              (like) => (like?._id || like)?.toString() === currentUserId.toString()
+            );
+            nextLikes = alreadyIn ? currentLikes : [...currentLikes, currentUserId];
+          } else {
+            nextLikes = currentLikes.filter(
+              (like) => (like?._id || like)?.toString() !== currentUserId.toString()
+            );
+          }
+          return {
+            ...story,
+            likes: nextLikes,
+          };
+        }
+        return story;
+      }),
+    }));
+
+    set({ stories: updatedStories });
+
+    // 2. Call backend API
+    try {
+      let res;
+      if (willLike) {
+        res = await axiosInstance.post(`/stories/${storyId}/like`);
+      } else {
+        res = await axiosInstance.delete(`/stories/${storyId}/like`);
+      }
+
+      // Sync with server response if available
+      if (res.data?.likes) {
+        set((state) => ({
+          stories: state.stories.map((group) => ({
+            ...group,
+            stories: group.stories.map((s) =>
+              s._id === storyId ? { ...s, likes: res.data.likes } : s
+            ),
+          })),
+        }));
+      }
+    } catch (error) {
+      // 3. Rollback on failure
+      console.error("Failed to update story like:", error);
+      set({ stories: previousStories });
+      toast.error(error.response?.data?.message || "Failed to update like status");
+    }
+  },
+
+  deleteStory: async (storyId) => {
+    try {
+      await axiosInstance.delete(`/stories/${storyId}`);
+
+      const { stories, activeUserIndex, activeStoryIndex, closeStoryViewer } = get();
+
+      if (activeUserIndex === null || activeStoryIndex === null) {
+        await get().getStories();
+        toast.success("Story deleted successfully");
+        return;
+      }
+
+      const currentGroup = stories[activeUserIndex];
+      const remainingUserStories = (currentGroup?.stories || []).filter((s) => s._id !== storyId);
+
+      if (remainingUserStories.length === 0) {
+        // User has no remaining stories in this group
+        const newStories = stories.filter((_, idx) => idx !== activeUserIndex);
+        if (newStories.length === 0) {
+          closeStoryViewer();
+          set({ stories: [] });
+        } else {
+          // If deleted group was the last user group, go to previous group
+          const nextUserIndex = activeUserIndex >= newStories.length ? newStories.length - 1 : activeUserIndex;
+          set({
+            stories: newStories,
+            activeUserIndex: nextUserIndex,
+            activeStoryIndex: 0,
+          });
+        }
+      } else {
+        // User still has remaining stories
+        const newStories = stories.map((group, idx) => {
+          if (idx === activeUserIndex) {
+            return { ...group, stories: remainingUserStories };
+          }
+          return group;
+        });
+
+        let nextStoryIndex = activeStoryIndex;
+        if (nextStoryIndex >= remainingUserStories.length) {
+          nextStoryIndex = remainingUserStories.length - 1;
+        }
+
+        set({
+          stories: newStories,
+          activeStoryIndex: nextStoryIndex,
+        });
+      }
+
+      toast.success("Story deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete story:", error);
+      toast.error(error.response?.data?.message || "Failed to delete story");
+      throw error;
+    }
+  },
 }));

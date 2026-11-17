@@ -7,20 +7,38 @@ import { io } from "socket.io-client";
  *   If not specified, derives from VITE_API_URL by stripping "/api"
  */
 const getSocketUrl = () => {
-  if (import.meta.env.MODE === "development") {
-    return "/";
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    const raw = import.meta.env.VITE_SOCKET_URL;
+    if (
+      raw &&
+      !raw.includes("localhost") &&
+      !raw.includes("127.0.0.1") &&
+      !raw.includes("your-render-app") &&
+      !raw.includes("your-backend")
+    ) {
+      return raw.trim().replace(/\/+$/, "");
+    }
+
+    const rawApi = import.meta.env.VITE_API_URL;
+    if (
+      rawApi &&
+      !rawApi.includes("localhost") &&
+      !rawApi.includes("127.0.0.1") &&
+      !rawApi.includes("your-render-app") &&
+      !rawApi.includes("your-backend")
+    ) {
+      return rawApi.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+    }
+
+    // Single-service deployment on Render: connect to same host
+    return window.location.origin;
   }
 
-  const raw = import.meta.env.VITE_SOCKET_URL;
-  if (raw && !raw.includes("your-render-app") && !raw.includes("your-backend")) {
-    return raw.trim().replace(/\/+$/, "");
-  }
-
-  const rawApi = import.meta.env.VITE_API_URL;
-  if (rawApi && !rawApi.includes("your-render-app") && !rawApi.includes("your-backend")) {
-    return rawApi.trim().replace(/\/+$/, "").replace(/\/api$/, "");
-  }
-
+  // Development
   return "/";
 };
 

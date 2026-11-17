@@ -27,3 +27,34 @@ export const uploadBufferToCloudinary = (buffer, folder, resourceType = "auto") 
     stream.end(buffer);
   });
 };
+
+/**
+ * Safely deletes an asset from Cloudinary by public ID or Cloudinary URL.
+ */
+export const deleteMediaFromCloudinary = async (mediaUrl, mediaType = "image", explicitPublicId = null) => {
+  try {
+    if (!isCloudinaryConfigured()) return;
+
+    let publicId = explicitPublicId;
+
+    if (!publicId && mediaUrl && typeof mediaUrl === "string" && mediaUrl.includes("cloudinary.com")) {
+      const urlParts = mediaUrl.split("/upload/");
+      if (urlParts.length > 1) {
+        let pathAfterUpload = urlParts[1];
+        // Strip version prefix if present, e.g. v1680000000/
+        pathAfterUpload = pathAfterUpload.replace(/^v\d+\//, "");
+        // Strip file extension
+        const dotIdx = pathAfterUpload.lastIndexOf(".");
+        publicId = dotIdx !== -1 ? pathAfterUpload.substring(0, dotIdx) : pathAfterUpload;
+      }
+    }
+
+    if (publicId) {
+      const resourceType = mediaType === "video" ? "video" : "image";
+      const result = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+      return result;
+    }
+  } catch (err) {
+    console.warn("[Cloudinary Delete Warning]", err.message);
+  }
+};

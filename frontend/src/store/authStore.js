@@ -59,10 +59,23 @@ export const useAuthStore = create((set, get) => ({
         localStorage.removeItem("chatconnect_user");
         set({ authUser: null });
       }
-    } catch {
-      localStorage.removeItem("chatconnect_token");
-      localStorage.removeItem("chatconnect_user");
-      set({ authUser: null });
+    } catch (err) {
+      console.warn("checkAuth error:", err);
+      // Only clear session if explicitly unauthenticated (401 or 403)
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        localStorage.removeItem("chatconnect_token");
+        localStorage.removeItem("chatconnect_user");
+        set({ authUser: null });
+      } else {
+        // Network error / server waking up on Render: retain saved session from localStorage
+        const cachedUser = getInitialUser();
+        if (cachedUser) {
+          set({ authUser: cachedUser });
+          try {
+            get().connectSocket();
+          } catch {}
+        }
+      }
     } finally {
       set({ isCheckingAuth: false });
     }

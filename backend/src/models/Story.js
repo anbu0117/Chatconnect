@@ -16,6 +16,10 @@ const storySchema = new mongoose.Schema(
       enum: ["image", "video"],
       default: "image",
     },
+    cloudinaryPublicId: {
+      type: String,
+      default: "",
+    },
     caption: {
       type: String,
       default: "",
@@ -30,6 +34,12 @@ const storySchema = new mongoose.Schema(
           type: Date,
           default: Date.now,
         },
+      },
+    ],
+    likes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
       },
     ],
     expiresAt: {

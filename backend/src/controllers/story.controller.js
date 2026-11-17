@@ -1,6 +1,7 @@
+import mongoose from "mongoose";
 import Story from "../models/Story.js";
 import Conversation from "../models/Conversation.js";
-import { uploadBufferToCloudinary } from "../utils/cloudinaryUpload.js";
+import { uploadBufferToCloudinary, deleteMediaFromCloudinary } from "../utils/cloudinaryUpload.js";
 
 /**
  * POST /api/stories
@@ -20,11 +21,13 @@ export const createStory = async (req, res, next) => {
     const mediaType = isVideo ? "video" : "image";
 
     let mediaUrl = "";
+    let cloudinaryPublicId = "";
 
     try {
       // Upload to Cloudinary with auto resource_type so it handles videos properly
       const result = await uploadBufferToCloudinary(req.file.buffer, "chatconnect/stories", "auto");
       mediaUrl = result.secure_url;
+      cloudinaryPublicId = result.public_id || "";
     } catch (uploadErr) {
       console.warn("[Story Upload] Cloudinary upload unavailable, falling back to data URI:", uploadErr.message);
       // Seamless fallback to base64 data URI so user is never blocked
@@ -36,8 +39,10 @@ export const createStory = async (req, res, next) => {
       userId,
       mediaUrl,
       mediaType,
+      cloudinaryPublicId,
       caption: caption || "",
       viewers: [],
+      likes: [],
     });
 
     res.status(201).json(story);
@@ -121,6 +126,10 @@ export const viewStory = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.user._id;
 
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid story ID" });
+    }
+
     const story = await Story.findById(id);
     
     if (!story) {
@@ -141,6 +150,133 @@ export const viewStory = async (req, res, next) => {
     }
 
     res.status(200).json(story);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/stories/:id/like
+ * Like a story. Stores unique user ID in MongoDB. Prevents duplicate likes.
+ */
+export const likeStory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid story ID" });
+    }
+
+    const story = await Story.findById(id);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    // Check if story is already expired
+    if (story.expiresAt && new Date(story.expiresAt) <= new Date()) {
+      return res.status(410).json({ message: "Story has expired" });
+    }
+
+    // Atomic $addToSet ensures unique user IDs and prevents duplicates
+    const updatedStory = await Story.findByIdAndUpdate(
+      id,
+      { $addToSet: { likes: userId } },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: "Story liked successfully",
+      likes: updatedStory.likes || [],
+      likesCount: updatedStory.likes ? updatedStory.likes.length : 0,
+      story: updatedStory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/stories/:id/like
+ * Unlike a story. Removes the user ID from the story's likes in MongoDB.
+ */
+export const unlikeStory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid story ID" });
+    }
+
+    const story = await Story.findById(id);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    // Atomic $pull removes user ID from likes array
+    const updatedStory = await Story.findByIdAndUpdate(
+      id,
+      { $pull: { likes: userId } },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: "Story unliked successfully",
+      likes: updatedStory.likes || [],
+      likesCount: updatedStory.likes ? updatedStory.likes.length : 0,
+      story: updatedStory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/stories/:id
+ * Delete a story.
+ * CRITICAL SECURITY RULE: Only the original owner who uploaded the story can delete it.
+ * Verifies ownership using req.user._id from the authenticated JWT session.
+ * Rejects unauthorized attempts with HTTP 403 Forbidden.
+ */
+export const deleteStory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const authenticatedUserId = req.user._id;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid story ID" });
+    }
+
+    const story = await Story.findById(id);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    // Security check: Only original creator can delete their story
+    if (story.userId.toString() !== authenticatedUserId.toString()) {
+      return res.status(403).json({
+        message: "Forbidden: You are not authorized to delete this story",
+      });
+    }
+
+    // Delete associated media from Cloudinary if hosted there
+    if (story.mediaUrl && story.mediaUrl.includes("cloudinary.com")) {
+      try {
+        await deleteMediaFromCloudinary(story.mediaUrl, story.mediaType, story.cloudinaryPublicId);
+      } catch (cloudErr) {
+        console.warn("[Cloudinary Delete Warning]", cloudErr.message);
+      }
+    }
+
+    // Delete the story document
+    await Story.findByIdAndDelete(id);
+
+    res.status(200).json({
+      success: true,
+      message: "Story deleted successfully",
+      storyId: id,
+    });
   } catch (error) {
     next(error);
   }
