@@ -1,8 +1,13 @@
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import LockedChat from "../models/LockedChat.js";
 import { uploadBufferToCloudinary } from "../utils/cloudinaryUpload.js";
 import { getReceiverSocketId, getIO } from "../socket/socket.js";
+import { createNotification } from "../utils/notificationHelper.js";
 import {
   getCachedConversationId,
   getOrFindConversationId,
@@ -59,6 +64,35 @@ export const getMessages = async (req, res, next) => {
       return res.status(403).json({ message: "Not authorized to view this conversation" });
     }
 
+    // Check if this conversation is locked by the requesting user
+    const isLocked = await LockedChat.exists({
+      userId: req.user._id,
+      conversationId: convId,
+    });
+
+    if (isLocked) {
+      const lockToken = req.headers["x-lock-token"];
+      let isUnlockValid = false;
+      if (lockToken && process.env.JWT_SECRET) {
+        try {
+          const decoded = jwt.verify(lockToken, process.env.JWT_SECRET);
+          if (
+            decoded?.userId === String(req.user._id) &&
+            decoded?.unlockType === "locked_chats"
+          ) {
+            isUnlockValid = true;
+          }
+        } catch {}
+      }
+      if (!isUnlockValid) {
+        return res.status(423).json({
+          message: "This conversation is locked. Please enter your PIN to view messages.",
+          isLocked: true,
+          conversationId: convId,
+        });
+      }
+    }
+
     const messages = await Message.find({ conversationId: convId })
       .sort({ createdAt: 1 })
       .lean();
@@ -67,7 +101,7 @@ export const getMessages = async (req, res, next) => {
     Message.updateMany(
       { conversationId: convId, receiverId: req.user._id, status: { $ne: "seen" } },
       { status: "seen" }
-    ).catch(() => {});
+    ).catch(() => { });
 
     res.status(200).json(messages);
   } catch (error) {
@@ -145,13 +179,31 @@ export const sendMessage = async (req, res, next) => {
     // 2. Return HTTP response to sender immediately (<5ms)
     res.status(201).json(messageDoc);
 
-    // 3. Persist to MongoDB in background asynchronously
+    // 3. Persist to MongoDB in background asynchronously & generate notification
     Promise.all([
       Message.create(messageDoc),
       Conversation.findByIdAndUpdate(conversationId, {
         lastMessage: messageId,
         updatedAt: new Date(),
       }),
+      (async () => {
+        const isLockedByReceiver = Boolean(
+          await LockedChat.exists({
+            userId: receiverId,
+            conversationId,
+          })
+        );
+        return createNotification({
+          recipient: receiverId,
+          sender: senderId,
+          type: "new_message",
+          title: isLockedByReceiver ? "Locked Chat" : `New message from ${req.user.username}`,
+          message: isLockedByReceiver
+            ? "🔒 New message in locked chat"
+            : (text ? (text.length > 50 ? text.slice(0, 47) + "..." : text) : "📷 Sent an image"),
+          relatedConversationId: conversationId,
+        });
+      })(),
     ]).catch((err) => {
       console.error("[DB] Background message save error:", err.message);
     });
@@ -180,8 +232,12 @@ export const getConversations = async (req, res, next) => {
       }
     });
 
-    // Attach unread count for the current authenticated user
-    const conversationsWithUnread = await Promise.all(
+    // Fetch user's locked chats
+    const lockedRecords = await LockedChat.find({ userId: req.user._id }).select("conversationId");
+    const lockedIds = new Set(lockedRecords.map((l) => l.conversationId.toString()));
+
+    // Attach unread count and isLocked flag for the current authenticated user
+    const conversationsWithDetails = await Promise.all(
       conversations.map(async (conv) => {
         const convObj = conv.toObject();
         const unreadCount = await Message.countDocuments({
@@ -190,11 +246,36 @@ export const getConversations = async (req, res, next) => {
           status: { $ne: "seen" },
         });
         convObj.unreadCount = unreadCount;
+        convObj.isLocked = lockedIds.has(conv._id.toString());
         return convObj;
       })
     );
 
-    res.status(200).json(conversationsWithUnread);
+    // Check if client provided valid unlock token
+    const lockToken = req.headers["x-lock-token"];
+    let isUnlocked = false;
+    if (lockToken && process.env.JWT_SECRET) {
+      try {
+        const decoded = jwt.verify(lockToken, process.env.JWT_SECRET);
+        if (decoded?.userId === String(req.user._id) && decoded?.unlockType === "locked_chats") {
+          isUnlocked = true;
+        }
+      } catch {}
+    }
+
+    if (req.query.lockedOnly === "true") {
+      if (!isUnlocked) {
+        return res.status(423).json({
+          message: "Locked chats are protected. Please enter your PIN to view them.",
+          isLocked: true,
+        });
+      }
+      return res.status(200).json(conversationsWithDetails.filter((c) => c.isLocked));
+    }
+
+    // Default: hide locked conversations from the normal chat list
+    const normalConversations = conversationsWithDetails.filter((c) => !c.isLocked);
+    res.status(200).json(normalConversations);
   } catch (error) {
     next(error);
   }
@@ -292,6 +373,235 @@ export const deleteMessage = async (req, res, next) => {
     }
 
     res.status(200).json({ success: true, messageId, conversationId });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/messages/lock/set-pin
+ * Set or change the authenticated user's private chat PIN
+ */
+export const setChatPin = async (req, res, next) => {
+  try {
+    const { pin, currentPin } = req.body;
+    const userId = req.user._id;
+
+    if (!pin || typeof pin !== "string" || pin.trim().length < 4 || pin.trim().length > 8) {
+      return res.status(400).json({ message: "PIN must be between 4 and 8 digits/characters" });
+    }
+
+    const user = await User.findById(userId).select("+chatPin");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // If user already has a PIN, verify currentPin
+    if (user.chatPin) {
+      if (!currentPin) {
+        return res.status(400).json({ message: "Current PIN is required to change PIN" });
+      }
+      const isMatch = await bcrypt.compare(currentPin, user.chatPin);
+      if (!isMatch) {
+        return res.status(401).json({ message: "Current PIN is incorrect" });
+      }
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.chatPin = await bcrypt.hash(pin.trim(), salt);
+    user.hasChatPin = true;
+    await user.save();
+
+    // Auto-generate unlock token so user doesn't need to re-enter immediately
+    const unlockToken = jwt.sign(
+      { userId: String(userId), unlockType: "locked_chats" },
+      process.env.JWT_SECRET,
+      { expiresIn: "2h" }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Chat PIN set successfully",
+      hasChatPin: true,
+      unlockToken,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/messages/lock/verify-pin
+ * Verify the user's PIN to unlock private locked chats
+ */
+export const verifyChatPin = async (req, res, next) => {
+  try {
+    const { pin } = req.body;
+    const userId = req.user._id;
+
+    if (!pin) {
+      return res.status(400).json({ message: "PIN is required" });
+    }
+
+    const user = await User.findById(userId).select("+chatPin");
+    if (!user || !user.chatPin) {
+      return res.status(400).json({ message: "No Chat PIN has been set yet. Please set a PIN first." });
+    }
+
+    const isMatch = await bcrypt.compare(pin.trim(), user.chatPin);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect PIN" });
+    }
+
+    const unlockToken = jwt.sign(
+      { userId: String(userId), unlockType: "locked_chats" },
+      process.env.JWT_SECRET,
+      { expiresIn: "2h" }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Chat unlocked successfully",
+      unlockToken,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/messages/lock/toggle/:conversationId
+ * Toggle lock/unlock status of a conversation for the authenticated user
+ */
+export const toggleLockConversation = async (req, res, next) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id;
+
+    if (!mongoose.isValidObjectId(conversationId)) {
+      return res.status(400).json({ message: "Invalid conversation ID" });
+    }
+
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      participants: userId,
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    const existingLock = await LockedChat.findOne({ userId, conversationId });
+
+    if (existingLock) {
+      await LockedChat.findByIdAndDelete(existingLock._id);
+      return res.status(200).json({
+        success: true,
+        isLocked: false,
+        message: "Conversation unlocked",
+        conversationId,
+      });
+    } else {
+      await LockedChat.create({ userId, conversationId });
+      return res.status(200).json({
+        success: true,
+        isLocked: true,
+        message: "Conversation locked",
+        conversationId,
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/messages/lock/status/:conversationId
+ * Get lock status of a conversation for the authenticated user
+ */
+export const getLockStatus = async (req, res, next) => {
+  try {
+    const { conversationId } = req.params;
+    const userId = req.user._id;
+
+    let convId = conversationId;
+    if (mongoose.isValidObjectId(conversationId)) {
+      const conv = await Conversation.findOne({
+        $or: [
+          { _id: conversationId, participants: userId },
+          { participants: { $all: [userId, conversationId], $size: 2 } },
+        ],
+      }).select("_id");
+      if (conv) convId = conv._id;
+    }
+
+    const isLocked = Boolean(
+      await LockedChat.exists({ userId, conversationId: convId })
+    );
+    const user = await User.findById(userId).select("hasChatPin");
+
+    res.status(200).json({
+      isLocked,
+      hasChatPin: Boolean(user?.hasChatPin),
+      conversationId: convId,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/messages/locked-conversations
+ * Fetch locked conversations after PIN verification
+ */
+export const getLockedConversations = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const lockToken = req.headers["x-lock-token"];
+
+    let isUnlocked = false;
+    if (lockToken && process.env.JWT_SECRET) {
+      try {
+        const decoded = jwt.verify(lockToken, process.env.JWT_SECRET);
+        if (decoded?.userId === String(userId) && decoded?.unlockType === "locked_chats") {
+          isUnlocked = true;
+        }
+      } catch {}
+    }
+
+    if (!isUnlocked) {
+      return res.status(423).json({
+        message: "Locked chats are protected. Please enter your PIN to view them.",
+        isLocked: true,
+      });
+    }
+
+    const lockedRecords = await LockedChat.find({ userId }).select("conversationId");
+    const lockedIds = lockedRecords.map((l) => l.conversationId);
+
+    const conversations = await Conversation.find({
+      _id: { $in: lockedIds },
+      participants: userId,
+    })
+      .populate("participants", "username profileImage isOnline lastSeen")
+      .populate("lastMessage")
+      .sort({ updatedAt: -1 });
+
+    const conversationsWithUnread = await Promise.all(
+      conversations.map(async (conv) => {
+        const convObj = conv.toObject();
+        const unreadCount = await Message.countDocuments({
+          conversationId: conv._id,
+          receiverId: userId,
+          status: { $ne: "seen" },
+        });
+        convObj.unreadCount = unreadCount;
+        convObj.isLocked = true;
+        return convObj;
+      })
+    );
+
+    res.status(200).json(conversationsWithUnread);
   } catch (error) {
     next(error);
   }

@@ -12,6 +12,8 @@ import ChatPage from "./pages/ChatPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import StoryViewer from "./components/StoryViewer.jsx";
 import ForwardModal from "./components/ForwardModal.jsx";
+import NotificationPanel from "./components/NotificationPanel.jsx";
+import ChatLockModal from "./components/ChatLockModal.jsx";
 
 const App = () => {
   const { authUser, checkAuth, isCheckingAuth, socket } = useAuthStore();
@@ -51,6 +53,8 @@ const App = () => {
       <Toaster position="top-center" />
       <StoryViewer />
       <ForwardModal />
+      <NotificationPanel />
+      <ChatLockModal />
     </>
   );
 };

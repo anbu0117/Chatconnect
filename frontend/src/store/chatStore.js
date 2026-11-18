@@ -2,6 +2,7 @@ import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios.js";
 import { useAuthStore } from "./authStore.js";
+import { useNotificationStore } from "./notificationStore.js";
 
 export const useChatStore = create((set, get) => ({
   users: [],
@@ -15,6 +16,90 @@ export const useChatStore = create((set, get) => ({
   setForwardingMessage: (message) => set({ forwardingMessage: message }),
   editingMessage: null, // message selected for editing
   setEditingMessage: (message) => set({ editingMessage: message }),
+
+  // Lock Chat State
+  isLockedChatsUnlocked: Boolean(sessionStorage.getItem("chatconnect_lock_token")),
+  lockedConversations: [],
+  isPinModalOpen: false,
+  pinModalMode: "unlock", // "unlock" | "set" | "change"
+  pendingLockConversationId: null,
+
+  setPinModalOpen: (isOpen, mode = "unlock", conversationId = null) =>
+    set({
+      isPinModalOpen: isOpen,
+      pinModalMode: mode,
+      pendingLockConversationId: conversationId,
+    }),
+
+  unlockWithToken: (token) => {
+    sessionStorage.setItem("chatconnect_lock_token", token);
+    set({ isLockedChatsUnlocked: true });
+    get().getLockedConversations();
+  },
+
+  lockAllChats: () => {
+    sessionStorage.removeItem("chatconnect_lock_token");
+    set({
+      isLockedChatsUnlocked: false,
+      lockedConversations: [],
+    });
+    toast.success("Private chats locked");
+  },
+
+  getLockedConversations: async () => {
+    try {
+      const res = await axiosInstance.get("/messages/locked-conversations");
+      set({ lockedConversations: res.data || [] });
+    } catch (err) {
+      if (err.response?.status === 423) {
+        set({ isLockedChatsUnlocked: false });
+      }
+    }
+  },
+
+  toggleLockConversation: async (conversationId) => {
+    try {
+      const res = await axiosInstance.post(`/messages/lock/toggle/${conversationId}`);
+      toast.success(res.data.message || (res.data.isLocked ? "Chat locked" : "Chat unlocked"));
+      await get().getConversations();
+      if (get().isLockedChatsUnlocked) {
+        await get().getLockedConversations();
+      }
+      return res.data;
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to toggle lock");
+      throw err;
+    }
+  },
+
+  verifyChatPin: async (pin) => {
+    try {
+      const res = await axiosInstance.post("/messages/lock/verify-pin", { pin });
+      if (res.data?.unlockToken) {
+        get().unlockWithToken(res.data.unlockToken);
+        toast.success("Chats unlocked");
+        return true;
+      }
+      return false;
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Incorrect PIN");
+      return false;
+    }
+  },
+
+  setChatPin: async (pin, currentPin) => {
+    try {
+      const res = await axiosInstance.post("/messages/lock/set-pin", { pin, currentPin });
+      if (res.data?.unlockToken) {
+        get().unlockWithToken(res.data.unlockToken);
+      }
+      toast.success(res.data?.message || "PIN set successfully");
+      return true;
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to set PIN");
+      return false;
+    }
+  },
 
   getUsers: async (search = "") => {
     set({ isUsersLoading: true });
@@ -430,6 +515,18 @@ export const useChatStore = create((set, get) => ({
         ),
       });
     });
+
+    socket.on("newNotification", (notification) => {
+      useNotificationStore.getState().addNotificationFromSocket(notification);
+      toast(notification.message || "New notification", {
+        icon:
+          notification.type === "story_like"
+            ? "❤️"
+            : notification.type === "story_comment"
+            ? "💬"
+            : "🔔",
+      });
+    });
   },
 
   unsubscribeFromSocketEvents: () => {
@@ -442,5 +539,6 @@ export const useChatStore = create((set, get) => ({
     socket.off("typing");
     socket.off("stopTyping");
     socket.off("messageSeen");
+    socket.off("newNotification");
   },
 }));

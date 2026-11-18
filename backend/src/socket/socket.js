@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
+import LockedChat from "../models/LockedChat.js";
+import { createNotification } from "../utils/notificationHelper.js";
 import {
   getCachedConversationId,
   getOrFindConversationId,
@@ -226,13 +228,32 @@ export const initSocket = (httpServer) => {
         // 2. INSTANT confirmation acknowledgment to sender (<2ms)
         ack?.({ success: true, message: messageDoc, tempId });
 
-        // 3. Persist to MongoDB in background asynchronously without blocking message dispatch
+        // 3. Persist to MongoDB in background asynchronously & generate notification
         Promise.all([
           Message.create(messageDoc),
           Conversation.findByIdAndUpdate(conversationId, {
             lastMessage: messageId,
             updatedAt: new Date(),
           }),
+          (async () => {
+            const sender = await User.findById(senderId).select("username");
+            const isLockedByReceiver = Boolean(
+              await LockedChat.exists({
+                userId: strReceiverId,
+                conversationId,
+              })
+            );
+            return createNotification({
+              recipient: strReceiverId,
+              sender: senderId,
+              type: "new_message",
+              title: isLockedByReceiver ? "Locked Chat" : `New message from ${sender?.username || "Someone"}`,
+              message: isLockedByReceiver
+                ? "🔒 New message in locked chat"
+                : (text ? (text.length > 50 ? text.slice(0, 47) + "..." : text) : "📷 Sent an image"),
+              relatedConversationId: conversationId,
+            });
+          })(),
         ]).catch((dbErr) => {
           console.error("[Socket] Background message save error:", dbErr.message);
         });

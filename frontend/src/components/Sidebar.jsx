@@ -1,5 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { Search, Users, MessageSquare, Plus, Edit3, CheckCheck, Clock, UserCheck } from "lucide-react";
+import {
+  Search,
+  Users,
+  MessageSquare,
+  Plus,
+  Edit3,
+  Lock,
+  Unlock,
+  KeyRound,
+  Shield,
+  ShieldAlert,
+} from "lucide-react";
 import { useChatStore } from "../store/chatStore.js";
 import { useAuthStore } from "../store/authStore.js";
 import SidebarSkeleton from "./SidebarSkeleton.jsx";
@@ -30,10 +41,15 @@ const Sidebar = () => {
     getConversations,
     selectedUser,
     setSelectedUser,
+    isLockedChatsUnlocked,
+    lockedConversations,
+    getLockedConversations,
+    setPinModalOpen,
+    lockAllChats,
   } = useChatStore();
   const { onlineUsers, authUser } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState("chats"); // "chats" | "users"
+  const [activeTab, setActiveTab] = useState("chats"); // "chats" | "locked" | "users"
   const [search, setSearch] = useState("");
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -44,6 +60,12 @@ const Sidebar = () => {
   }, [getUsers, getConversations]);
 
   useEffect(() => {
+    if (isLockedChatsUnlocked && activeTab === "locked") {
+      getLockedConversations();
+    }
+  }, [isLockedChatsUnlocked, activeTab, getLockedConversations]);
+
+  useEffect(() => {
     const timeout = setTimeout(() => getUsers(search), 300); // debounce search
     return () => clearTimeout(timeout);
   }, [search, getUsers]);
@@ -52,14 +74,24 @@ const Sidebar = () => {
     ? users.filter((u) => onlineUsers.includes(u._id))
     : users;
 
-  // Filter conversations by search query if in chats tab
+  // Filter regular conversations
   const filteredConversations = conversations.filter((conv) => {
     if (!search.trim()) return true;
-    const partner = conv.participants?.find((p) => p._id !== authUser?._id) || conv.participants?.[0];
+    const partner =
+      conv.participants?.find((p) => p._id !== authUser?._id) ||
+      conv.participants?.[0];
     return partner?.username?.toLowerCase().includes(search.toLowerCase());
   });
 
-  // Calculate total unread messages across all conversations
+  // Filter locked conversations
+  const filteredLockedConversations = lockedConversations.filter((conv) => {
+    if (!search.trim()) return true;
+    const partner =
+      conv.participants?.find((p) => p._id !== authUser?._id) ||
+      conv.participants?.[0];
+    return partner?.username?.toLowerCase().includes(search.toLowerCase());
+  });
+
   const totalUnreadCount = conversations.reduce(
     (acc, c) => acc + (c.unreadCount || 0),
     0
@@ -70,22 +102,23 @@ const Sidebar = () => {
       {/* Story Strip at Top */}
       <StoryStrip />
 
-      {/* Navigation Tabs: Chats & All Users */}
-      <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800 px-3 pt-2 gap-2">
+      {/* Navigation Tabs: Chats, Locked, and All Users */}
+      <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800 px-2.5 pt-2 gap-1.5">
         <button
           type="button"
           onClick={() => setActiveTab("chats")}
-          className={`flex-1 py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition ${
+          className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition ${
             activeTab === "chats"
               ? "bg-brand-500 text-white shadow-sm"
               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           }`}
+          title="All standard private chats"
         >
           <MessageSquare className="h-3.5 w-3.5" />
           <span>Chats</span>
           {totalUnreadCount > 0 && (
             <span
-              className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                 activeTab === "chats"
                   ? "bg-white text-brand-600"
                   : "bg-brand-500 text-white"
@@ -98,17 +131,41 @@ const Sidebar = () => {
 
         <button
           type="button"
+          onClick={() => {
+            setActiveTab("locked");
+            if (!isLockedChatsUnlocked) {
+              setPinModalOpen(true, "unlock");
+            }
+          }}
+          className={`py-2 px-2.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition ${
+            activeTab === "locked"
+              ? "bg-amber-500 text-white shadow-sm"
+              : "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+          }`}
+          title="Protected Locked Chats"
+        >
+          {isLockedChatsUnlocked ? (
+            <Unlock className="h-3.5 w-3.5" />
+          ) : (
+            <Lock className="h-3.5 w-3.5" />
+          )}
+          <span>Locked</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("users")}
-          className={`flex-1 py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition ${
+          className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition ${
             activeTab === "users"
               ? "bg-brand-500 text-white shadow-sm"
               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           }`}
+          title="All registered users"
         >
           <Users className="h-3.5 w-3.5" />
-          <span>All Users</span>
+          <span>Users</span>
           <span
-            className={`ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+            className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
               activeTab === "users"
                 ? "bg-white text-brand-600"
                 : "bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -127,7 +184,11 @@ const Sidebar = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={
-              activeTab === "chats" ? "Search chats..." : "Search users to message..."
+              activeTab === "chats"
+                ? "Search chats..."
+                : activeTab === "locked"
+                ? "Search locked chats..."
+                : "Search users to message..."
             }
             className="w-full rounded-lg border border-neutral-300 bg-transparent py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
           />
@@ -197,7 +258,6 @@ const Sidebar = () => {
                           : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
                       }`}
                     >
-                      {/* Avatar */}
                       <div className="relative shrink-0">
                         <img
                           src={partner.profileImage || "/default-avatar.svg"}
@@ -209,7 +269,6 @@ const Sidebar = () => {
                         )}
                       </div>
 
-                      {/* Content */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
                           <p className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100">
@@ -239,6 +298,123 @@ const Sidebar = () => {
               })}
             </ul>
           )
+        ) : activeTab === "locked" ? (
+          /* ================= LOCKED CHATS TAB ================= */
+          !isLockedChatsUnlocked ? (
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in duration-200">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-3 ring-1 ring-amber-500/20 shadow-sm">
+                <Lock className="h-7 w-7" />
+              </div>
+              <p className="text-sm font-bold text-neutral-800 dark:text-neutral-200">
+                Locked Private Chats
+              </p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 max-w-[220px]">
+                Conversations here are protected and hidden from the regular chat list.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPinModalOpen(true, "unlock")}
+                className="mt-4 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-md transition active:scale-95 flex items-center gap-1.5"
+              >
+                <Unlock className="h-4 w-4" />
+                <span>Unlock with PIN</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col h-full">
+              {/* Unlock Bar with Lock Action */}
+              <div className="flex items-center justify-between px-3 py-2 bg-amber-500/10 border-b border-amber-500/20">
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                  <Unlock className="h-3.5 w-3.5" />
+                  Unlocked ({filteredLockedConversations.length})
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPinModalOpen(true, "change")}
+                    className="text-[11px] font-medium text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 px-1.5 py-0.5 rounded"
+                  >
+                    Change PIN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={lockAllChats}
+                    className="text-[11px] font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition"
+                  >
+                    Lock Now
+                  </button>
+                </div>
+              </div>
+
+              {filteredLockedConversations.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-8 text-center text-neutral-400">
+                  <Shield className="h-8 w-8 text-neutral-400 mb-2" />
+                  <p className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                    No locked chats yet
+                  </p>
+                  <p className="text-[11px] text-neutral-400 mt-1 max-w-[200px]">
+                    Open any conversation and tap "Lock Chat" to protect it here!
+                  </p>
+                </div>
+              ) : (
+                <ul className="p-2 space-y-1">
+                  {filteredLockedConversations.map((conv) => {
+                    const partner =
+                      conv.participants?.find((p) => p._id !== authUser?._id) ||
+                      conv.participants?.[0];
+                    if (!partner) return null;
+
+                    const isOnline = onlineUsers.includes(partner._id);
+                    const isSelected = selectedUser?._id === partner._id;
+                    const lastMsg = conv.lastMessage;
+
+                    return (
+                      <li key={conv._id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUser(partner)}
+                          className={`flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition ${
+                            isSelected
+                              ? "bg-amber-500/20"
+                              : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                          }`}
+                        >
+                          <div className="relative shrink-0">
+                            <img
+                              src={partner.profileImage || "/default-avatar.svg"}
+                              alt={partner.username}
+                              className="h-11 w-11 rounded-full object-cover ring-2 ring-amber-500/40"
+                            />
+                            {isOnline && (
+                              <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-surface-dark" />
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-1">
+                                <span>{partner.username}</span>
+                                <Lock className="h-3 w-3 text-amber-500 shrink-0" />
+                              </p>
+                              <span className="text-[10px] text-neutral-400 shrink-0">
+                                {formatSnippetTime(conv.updatedAt || lastMsg?.createdAt)}
+                              </span>
+                            </div>
+
+                            <p className="truncate text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                              {lastMsg?.imageUrl && !lastMsg?.text
+                                ? "📷 Photo"
+                                : lastMsg?.text || "Locked chat"}
+                            </p>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )
         ) : (
           /* ================= ALL USERS TAB ================= */
           visibleUsers.length === 0 ? (
@@ -261,7 +437,6 @@ const Sidebar = () => {
                           : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
                       }`}
                     >
-                      {/* User Info */}
                       <button
                         type="button"
                         onClick={() => setSelectedUser(user)}
@@ -291,7 +466,6 @@ const Sidebar = () => {
                         </div>
                       </button>
 
-                      {/* Start Private Chat Action Button */}
                       <button
                         type="button"
                         onClick={() => setSelectedUser(user)}

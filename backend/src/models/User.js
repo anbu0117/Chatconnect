@@ -52,6 +52,15 @@ const userSchema = new mongoose.Schema(
       default: null,
       select: false,
     },
+    chatPin: {
+      type: String,
+      default: null,
+      select: false, // never return hashed PIN in normal queries
+    },
+    hasChatPin: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
@@ -67,6 +76,12 @@ userSchema.pre("save", async function (next) {
 // Instance method to compare plaintext password with the hashed one
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
+};
+
+// Instance method to compare plaintext PIN with the hashed PIN
+userSchema.methods.compareChatPin = async function (candidatePin) {
+  if (!this.chatPin) return false;
+  return bcrypt.compare(candidatePin, this.chatPin);
 };
 
 const User = mongoose.model("User", userSchema);

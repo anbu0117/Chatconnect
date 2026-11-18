@@ -1,8 +1,11 @@
 import mongoose from "mongoose";
 import Story from "../models/Story.js";
 import Conversation from "../models/Conversation.js";
+import StoryComment from "../models/StoryComment.js";
+import Notification from "../models/Notification.js";
 import { uploadBufferToCloudinary, deleteMediaFromCloudinary } from "../utils/cloudinaryUpload.js";
 import { getIO } from "../socket/socket.js";
+import { createNotification } from "../utils/notificationHelper.js";
 
 /**
  * POST /api/stories
@@ -188,6 +191,18 @@ export const likeStory = async (req, res, next) => {
       { new: true }
     );
 
+    // Generate real-time notification for the story owner
+    if (String(story.userId) !== String(userId)) {
+      createNotification({
+        recipient: story.userId,
+        sender: userId,
+        type: "story_like",
+        title: "Story Liked",
+        message: `${req.user.username} liked your story`,
+        relatedStoryId: story._id,
+      }).catch(() => {});
+    }
+
     res.status(200).json({
       message: "Story liked successfully",
       likes: updatedStory.likes || [],
@@ -272,8 +287,12 @@ export const deleteStory = async (req, res, next) => {
       }
     }
 
-    // Delete the story document
-    await Story.findByIdAndDelete(id);
+    // Delete the story document and associated comments & notifications
+    await Promise.all([
+      Story.findByIdAndDelete(id),
+      StoryComment.deleteMany({ storyId: id }),
+      Notification.deleteMany({ relatedStoryId: id }),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -327,7 +346,28 @@ export const addComment = async (req, res, next) => {
     };
 
     story.comments.push(commentDoc);
-    await story.save();
+    await Promise.all([
+      story.save(),
+      StoryComment.create({
+        _id: commentDoc._id,
+        storyId: id,
+        userId,
+        text: trimmedText,
+      }),
+    ]);
+
+    // Generate notification for the story owner
+    if (String(story.userId) !== String(userId)) {
+      const previewText = trimmedText.length > 40 ? trimmedText.slice(0, 37) + "..." : trimmedText;
+      createNotification({
+        recipient: story.userId,
+        sender: userId,
+        type: "story_comment",
+        title: "New Comment",
+        message: `${req.user.username} commented: "${previewText}"`,
+        relatedStoryId: story._id,
+      }).catch(() => {});
+    }
 
     // Populate user info for the newly created comment
     const populatedStory = await Story.findById(id)
@@ -393,7 +433,10 @@ export const deleteComment = async (req, res, next) => {
     }
 
     story.comments.pull({ _id: commentId });
-    await story.save();
+    await Promise.all([
+      story.save(),
+      StoryComment.findByIdAndDelete(commentId),
+    ]);
 
     // Broadcast real-time comment deletion
     try {

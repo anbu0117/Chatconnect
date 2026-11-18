@@ -143,6 +143,7 @@ export const useAuthStore = create((set, get) => ({
     } finally {
       localStorage.removeItem("chatconnect_token");
       localStorage.removeItem("chatconnect_user");
+      sessionStorage.removeItem("chatconnect_lock_token");
       set({ authUser: null });
       get().disconnectSocket();
       toast.success("Logged out");

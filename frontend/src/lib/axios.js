@@ -44,6 +44,10 @@ axiosInstance.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const lockToken = sessionStorage.getItem("chatconnect_lock_token") || localStorage.getItem("chatconnect_lock_token");
+  if (lockToken) {
+    config.headers["x-lock-token"] = lockToken;
+  }
   return config;
 });
 

@@ -15,6 +15,7 @@ import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import storyRoutes from "./routes/storyRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 import { initSocket } from "./socket/socket.js";
 import { apiLimiter, authLimiter } from "./middleware/rateLimiter.js";
 import { validate } from "./middleware/validate.js";
@@ -125,6 +126,8 @@ app.use("/api/messages", messageRoutes);
 app.use("/messages", messageRoutes);
 app.use("/api/stories", storyRoutes);
 app.use("/stories", storyRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/notifications", notificationRoutes);
 
 // Direct convenience aliases for auth endpoints (prevents 404 if called without /auth or /api)
 app.get("/api/check", checkAuth);
