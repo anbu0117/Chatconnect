@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useStoryStore } from "../store/storyStore";
 import { useAuthStore } from "../store/authStore";
-import { X, Pause, Play, Heart, Trash2, MoreVertical, Loader2 } from "lucide-react";
+import { X, Pause, Play, Heart, Trash2, MoreVertical, Loader2, MessageCircle, Send } from "lucide-react";
 import toast from "react-hot-toast";
 
 const STORY_DURATION = 5000; // 5 seconds per image story
@@ -17,7 +17,9 @@ const StoryViewer = () => {
     prevStory,
     viewStory,
     toggleLike,
-    deleteStory
+    deleteStory,
+    addComment,
+    deleteComment
   } = useStoryStore();
   
   const { authUser } = useAuthStore();
@@ -28,12 +30,15 @@ const StoryViewer = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [commentInput, setCommentInput] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   const videoRef = useRef(null);
   const menuRef = useRef(null);
 
-  // Story is paused if manual pause, touch holding, menu open, or delete dialog open
-  const isPaused = isManualPaused || isHolding || isMenuOpen || isDeleteDialogOpen || isDeleting;
+  // Story is paused if manual pause, touch holding, menu open, delete dialog open, or comments drawer open
+  const isPaused = isManualPaused || isHolding || isMenuOpen || isDeleteDialogOpen || isDeleting || isCommentsOpen;
 
   // Close 3-dot menu on click outside
   useEffect(() => {
@@ -54,7 +59,9 @@ const StoryViewer = () => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
-        if (isDeleteDialogOpen) {
+        if (isCommentsOpen) {
+          setIsCommentsOpen(false);
+        } else if (isDeleteDialogOpen) {
           setIsDeleteDialogOpen(false);
         } else if (isMenuOpen) {
           setIsMenuOpen(false);
@@ -65,7 +72,7 @@ const StoryViewer = () => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isDeleteDialogOpen, isMenuOpen, closeStoryViewer]);
+  }, [isCommentsOpen, isDeleteDialogOpen, isMenuOpen, closeStoryViewer]);
 
   // Reset progress & state when story changes
   useEffect(() => {
@@ -75,6 +82,8 @@ const StoryViewer = () => {
     setIsMenuOpen(false);
     setIsDeleteDialogOpen(false);
     setIsDeleting(false);
+    setIsCommentsOpen(false);
+    setCommentInput("");
     
     // Mark as viewed if it's not our own story
     if (isStoryViewerOpen && activeUserIndex !== null && activeStoryIndex !== null) {
@@ -162,6 +171,10 @@ const StoryViewer = () => {
   );
   const likesCount = likesList.length;
 
+  // Comments list and count
+  const commentsList = currentStory.comments || [];
+  const commentsCount = commentsList.length;
+
   const handleVideoTimeUpdate = () => {
     if (videoRef.current && videoRef.current.duration) {
       const p = (videoRef.current.currentTime / videoRef.current.duration) * 100;
@@ -175,7 +188,7 @@ const StoryViewer = () => {
 
   // Click handling for left/right navigation
   const handleClick = (e) => {
-    if (isMenuOpen) {
+    if (isMenuOpen || isCommentsOpen) {
       setIsMenuOpen(false);
       return;
     }
@@ -196,6 +209,27 @@ const StoryViewer = () => {
       return;
     }
     await toggleLike(currentStory._id, authUser._id);
+  };
+
+  // Submit comment handler
+  const handleSendComment = async (e) => {
+    e?.preventDefault?.();
+    if (!commentInput.trim() || isSubmittingComment || !currentStory?._id) return;
+    if (!authUser) {
+      toast.error("Please login to comment");
+      return;
+    }
+
+    try {
+      setIsSubmittingComment(true);
+      const textToSend = commentInput.trim();
+      setCommentInput("");
+      await addComment(currentStory._id, textToSend);
+    } catch {
+      // Toast error handled in storyStore
+    } finally {
+      setIsSubmittingComment(false);
+    }
   };
 
   // Delete story handler
@@ -370,8 +404,30 @@ const StoryViewer = () => {
               ) : null}
             </div>
 
-            {/* Like Button & Count on the right */}
-            <div className="pointer-events-auto shrink-0">
+            {/* Story Action Buttons: Comments & Like */}
+            <div className="pointer-events-auto shrink-0 flex items-center gap-2">
+              {/* Comment Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsCommentsOpen(true);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md transition-all border border-white/15 active:scale-95 shadow-lg group"
+                title="View & add comments"
+              >
+                <MessageCircle
+                  size={20}
+                  className="text-white group-hover:text-brand-400 group-hover:scale-110 transition-transform duration-200"
+                />
+                <span className="text-white text-xs sm:text-sm font-semibold select-none">
+                  {commentsCount}
+                </span>
+              </button>
+
+              {/* Like Button */}
               <button
                 type="button"
                 onClick={handleToggleLike}
@@ -395,6 +451,135 @@ const StoryViewer = () => {
             </div>
           </div>
         </div>
+
+        {/* Story Comments Drawer / Bottom Sheet */}
+        {isCommentsOpen && (
+          <div
+            className="absolute inset-0 z-40 bg-black/70 backdrop-blur-md flex flex-col justify-end animate-in fade-in duration-200"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCommentsOpen(false);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <div
+              className="w-full bg-neutral-900 border-t border-white/10 rounded-t-3xl max-h-[75%] h-[420px] flex flex-col shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <MessageCircle size={18} className="text-brand-400" />
+                  <h3 className="text-white text-sm font-semibold">
+                    Comments ({commentsCount})
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCommentsOpen(false)}
+                  className="text-neutral-400 hover:text-white p-1 rounded-full transition"
+                  title="Close comments"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Comments Scrollable List */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 scrollbar-thin">
+                {commentsList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                    <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 mb-2">
+                      <MessageCircle size={22} />
+                    </div>
+                    <p className="text-neutral-300 text-sm font-medium">No comments yet</p>
+                    <p className="text-neutral-500 text-xs mt-0.5">
+                      Be the first to share your thoughts on this story!
+                    </p>
+                  </div>
+                ) : (
+                  commentsList.map((c) => {
+                    const commenterId = c.userId?._id || c.userId;
+                    const commenterName = c.userId?.username || "User";
+                    const commenterAvatar = c.userId?.profileImage || "/default-avatar.svg";
+                    const canDelete =
+                      authUser &&
+                      (String(commenterId) === String(authUser._id) || isOwner);
+
+                    return (
+                      <div
+                        key={c._id}
+                        className="flex items-start gap-2.5 group/comment text-left"
+                      >
+                        <img
+                          src={commenterAvatar}
+                          alt={commenterName}
+                          className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-white/10"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-white truncate">
+                              {commenterName}
+                            </span>
+                            <span className="text-[10px] text-neutral-400">
+                              {new Date(c.createdAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-xs text-neutral-200 mt-0.5 break-words whitespace-pre-wrap leading-relaxed">
+                            {c.text}
+                          </p>
+                        </div>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await deleteComment(currentStory._id, c._id);
+                            }}
+                            className="opacity-0 group-hover/comment:opacity-100 text-neutral-400 hover:text-red-400 p-1 rounded transition shrink-0"
+                            title="Delete comment"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Comment Input Footer */}
+              <form
+                onSubmit={handleSendComment}
+                className="p-3 bg-neutral-950/80 border-t border-white/10 flex items-center gap-2"
+              >
+                <input
+                  type="text"
+                  value={commentInput}
+                  onChange={(e) => setCommentInput(e.target.value)}
+                  placeholder="Add a comment..."
+                  maxLength={500}
+                  disabled={isSubmittingComment}
+                  className="flex-1 bg-neutral-800 text-white placeholder-neutral-400 text-xs rounded-full px-3.5 py-2.5 outline-none border border-white/10 focus:border-brand-500 transition"
+                />
+                <button
+                  type="submit"
+                  disabled={!commentInput.trim() || isSubmittingComment}
+                  className="w-8 h-8 rounded-full bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:hover:bg-brand-500 text-white flex items-center justify-center transition shrink-0 shadow-md"
+                  title="Post comment"
+                >
+                  {isSubmittingComment ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Send size={14} />
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation Modal */}
         {isDeleteDialogOpen && (

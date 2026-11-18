@@ -37,7 +37,17 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  setSelectedUser: (user) => set({ selectedUser: user }),
+  setSelectedUser: (user) => {
+    set({ selectedUser: user });
+    if (user?._id) {
+      set((state) => ({
+        conversations: state.conversations.map((c) => {
+          const isMatch = c.participants?.some((p) => (p._id || p) === user._id);
+          return isMatch ? { ...c, unreadCount: 0 } : c;
+        }),
+      }));
+    }
+  },
 
   getMessages: async (conversationId) => {
     if (!conversationId) return set({ messages: [] });
@@ -338,15 +348,19 @@ export const useChatStore = create((set, get) => ({
           ? message.receiverId
           : message.senderId;
 
+      const isCurrentChatOpen = selectedUser && selectedUser._id === otherUserId;
+
       const convIndex = conversations.findIndex((c) =>
-        c.participants.some((p) => p._id === otherUserId)
+        c.participants.some((p) => (p._id || p) === otherUserId)
       );
 
       if (convIndex !== -1) {
+        const prevUnread = conversations[convIndex].unreadCount || 0;
         const updatedConv = {
           ...conversations[convIndex],
           lastMessage: message,
           updatedAt: message.createdAt || new Date().toISOString(),
+          unreadCount: isCurrentChatOpen ? 0 : prevUnread + 1,
         };
         const remaining = conversations.filter((_, i) => i !== convIndex);
         set({ conversations: [updatedConv, ...remaining] });

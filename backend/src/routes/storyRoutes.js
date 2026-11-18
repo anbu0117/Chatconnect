@@ -7,6 +7,8 @@ import {
   likeStory,
   unlikeStory,
   deleteStory,
+  addComment,
+  deleteComment,
 } from "../controllers/story.controller.js";
 import { upload } from "../middleware/upload.js";
 
@@ -19,6 +21,8 @@ router.get("/", getStories);
 router.post("/:id/view", viewStory);
 router.post("/:id/like", likeStory);
 router.delete("/:id/like", unlikeStory);
+router.post("/:id/comments", addComment);
+router.delete("/:storyId/comments/:commentId", deleteComment);
 router.delete("/:id", deleteStory);
 
 export default router;

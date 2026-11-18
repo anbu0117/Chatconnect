@@ -270,4 +270,108 @@ export const useStoryStore = create((set, get) => ({
       throw error;
     }
   },
+
+  addComment: async (storyId, text) => {
+    if (!storyId || !text || !text.trim()) return false;
+
+    const previousStories = get().stories;
+    const authUserStr = localStorage.getItem("chatconnect_user");
+    const currentAuthUser = authUserStr ? JSON.parse(authUserStr) : null;
+
+    const tempComment = {
+      _id: `temp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: {
+        _id: currentAuthUser?._id,
+        username: currentAuthUser?.username || "You",
+        profileImage: currentAuthUser?.profileImage || "",
+      },
+      text: text.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    // 1. Optimistic update
+    const updatedStories = previousStories.map((group) => ({
+      ...group,
+      stories: group.stories.map((story) => {
+        if (story._id === storyId) {
+          return {
+            ...story,
+            comments: [...(story.comments || []), tempComment],
+          };
+        }
+        return story;
+      }),
+    }));
+
+    set({ stories: updatedStories });
+
+    // 2. Call backend API
+    try {
+      const res = await axiosInstance.post(`/stories/${storyId}/comments`, {
+        text: text.trim(),
+      });
+
+      // Replace temp comment with server populated comment
+      const serverComment = res.data?.comment;
+      if (serverComment) {
+        set((state) => ({
+          stories: state.stories.map((group) => ({
+            ...group,
+            stories: group.stories.map((story) => {
+              if (story._id === storyId) {
+                const currentComments = story.comments || [];
+                const replaced = currentComments.map((c) =>
+                  c._id === tempComment._id ? serverComment : c
+                );
+                return { ...story, comments: replaced };
+              }
+              return story;
+            }),
+          })),
+        }));
+      }
+      return true;
+    } catch (error) {
+      // 3. Rollback
+      console.error("Failed to add comment:", error);
+      set({ stories: previousStories });
+      toast.error(error.response?.data?.message || "Failed to post comment");
+      return false;
+    }
+  },
+
+  deleteComment: async (storyId, commentId) => {
+    if (!storyId || !commentId) return false;
+
+    const previousStories = get().stories;
+
+    // 1. Optimistic local removal
+    const updatedStories = previousStories.map((group) => ({
+      ...group,
+      stories: group.stories.map((story) => {
+        if (story._id === storyId) {
+          return {
+            ...story,
+            comments: (story.comments || []).filter((c) => c._id !== commentId),
+          };
+        }
+        return story;
+      }),
+    }));
+
+    set({ stories: updatedStories });
+
+    // 2. Call backend API
+    try {
+      await axiosInstance.delete(`/stories/${storyId}/comments/${commentId}`);
+      toast.success("Comment deleted");
+      return true;
+    } catch (error) {
+      // 3. Rollback
+      console.error("Failed to delete comment:", error);
+      set({ stories: previousStories });
+      toast.error(error.response?.data?.message || "Failed to delete comment");
+      return false;
+    }
+  },
 }));

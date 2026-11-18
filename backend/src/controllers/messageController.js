@@ -63,6 +63,12 @@ export const getMessages = async (req, res, next) => {
       .sort({ createdAt: 1 })
       .lean();
 
+    // Mark unread messages sent to this user as seen
+    Message.updateMany(
+      { conversationId: convId, receiverId: req.user._id, status: { $ne: "seen" } },
+      { status: "seen" }
+    ).catch(() => {});
+
     res.status(200).json(messages);
   } catch (error) {
     next(error);
@@ -174,7 +180,21 @@ export const getConversations = async (req, res, next) => {
       }
     });
 
-    res.status(200).json(conversations);
+    // Attach unread count for the current authenticated user
+    const conversationsWithUnread = await Promise.all(
+      conversations.map(async (conv) => {
+        const convObj = conv.toObject();
+        const unreadCount = await Message.countDocuments({
+          conversationId: conv._id,
+          receiverId: req.user._id,
+          status: { $ne: "seen" },
+        });
+        convObj.unreadCount = unreadCount;
+        return convObj;
+      })
+    );
+
+    res.status(200).json(conversationsWithUnread);
   } catch (error) {
     next(error);
   }

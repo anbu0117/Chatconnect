@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Story from "../models/Story.js";
 import Conversation from "../models/Conversation.js";
 import { uploadBufferToCloudinary, deleteMediaFromCloudinary } from "../utils/cloudinaryUpload.js";
+import { getIO } from "../socket/socket.js";
 
 /**
  * POST /api/stories
@@ -43,6 +44,7 @@ export const createStory = async (req, res, next) => {
       caption: caption || "",
       viewers: [],
       likes: [],
+      comments: [],
     });
 
     res.status(201).json(story);
@@ -83,6 +85,7 @@ export const getStories = async (req, res, next) => {
       expiresAt: { $gt: new Date() },
     })
       .populate("userId", "username profileImage")
+      .populate("comments.userId", "username profileImage")
       .sort({ createdAt: 1 }); // Oldest stories first so they play in order
 
     // 3. Group stories by user
@@ -276,6 +279,137 @@ export const deleteStory = async (req, res, next) => {
       success: true,
       message: "Story deleted successfully",
       storyId: id,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/stories/:id/comments
+ * Add a comment to a story.
+ * Validates text length, prevents empty submissions, ensures story is active.
+ */
+export const addComment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+    const userId = req.user._id;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid story ID" });
+    }
+
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ message: "Comment text cannot be empty" });
+    }
+
+    const trimmedText = text.trim();
+    if (trimmedText.length > 500) {
+      return res.status(400).json({ message: "Comment cannot exceed 500 characters" });
+    }
+
+    const story = await Story.findById(id);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    // Check if story is already expired
+    if (story.expiresAt && new Date(story.expiresAt) <= new Date()) {
+      return res.status(410).json({ message: "Story has expired" });
+    }
+
+    const commentDoc = {
+      _id: new mongoose.Types.ObjectId(),
+      userId,
+      text: trimmedText,
+      createdAt: new Date(),
+    };
+
+    story.comments.push(commentDoc);
+    await story.save();
+
+    // Populate user info for the newly created comment
+    const populatedStory = await Story.findById(id)
+      .populate("comments.userId", "username profileImage")
+      .select("comments");
+
+    const createdComment = populatedStory.comments.id(commentDoc._id);
+
+    // Broadcast real-time comment to other active viewers
+    try {
+      getIO().emit("storyCommentAdded", {
+        storyId: id,
+        comment: createdComment,
+      });
+    } catch (socketErr) {
+      // Non-blocking socket broadcast
+    }
+
+    res.status(201).json({
+      message: "Comment added successfully",
+      comment: createdComment,
+      comments: populatedStory.comments,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/stories/:storyId/comments/:commentId
+ * Delete a comment on a story.
+ * SECURITY RULE:
+ * - Only the comment author can delete their own comment.
+ * - OR the story owner can delete any comment on their story (moderation).
+ * Returns HTTP 403 Forbidden for unauthorized requests.
+ */
+export const deleteComment = async (req, res, next) => {
+  try {
+    const { storyId, commentId } = req.params;
+    const authenticatedUserId = req.user._id;
+
+    if (!mongoose.isValidObjectId(storyId) || !mongoose.isValidObjectId(commentId)) {
+      return res.status(400).json({ message: "Invalid ID parameter" });
+    }
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({ message: "Story not found" });
+    }
+
+    const comment = story.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+
+    const isCommentAuthor = comment.userId.toString() === authenticatedUserId.toString();
+    const isStoryOwner = story.userId.toString() === authenticatedUserId.toString();
+
+    if (!isCommentAuthor && !isStoryOwner) {
+      return res.status(403).json({
+        message: "Forbidden: You are not authorized to delete this comment",
+      });
+    }
+
+    story.comments.pull({ _id: commentId });
+    await story.save();
+
+    // Broadcast real-time comment deletion
+    try {
+      getIO().emit("storyCommentDeleted", {
+        storyId,
+        commentId,
+      });
+    } catch (socketErr) {
+      // Non-blocking socket broadcast
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Comment deleted successfully",
+      storyId,
+      commentId,
     });
   } catch (error) {
     next(error);

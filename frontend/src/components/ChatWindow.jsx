@@ -40,7 +40,11 @@ const ChatWindow = () => {
   useEffect(() => {
     if (!socket || !selectedUser) return;
     messages
-      .filter((m) => m.senderId === selectedUser._id && m.status !== "seen")
+      .filter(
+        (m) =>
+          String(m.senderId?._id || m.senderId) === String(selectedUser._id) &&
+          m.status !== "seen"
+      )
       .forEach((m) => {
         socket.emit("messageSeen", { messageId: m._id, senderId: selectedUser._id });
       });
@@ -85,7 +89,10 @@ const ChatWindow = () => {
             <MessageBubble
               key={message._id}
               message={message}
-              isOwnMessage={message.senderId === authUser._id}
+              isOwnMessage={
+                String(message.senderId?._id || message.senderId) ===
+                String(authUser?._id)
+              }
             />
           ))}
           {isTyping && <TypingIndicator />}
