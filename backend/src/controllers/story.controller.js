@@ -15,6 +15,20 @@ export const createStory = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const { caption } = req.body;
+    const visibility = req.body.visibility === "closeFriends" ? "closeFriends" : "everyone";
+    let closeFriendIds = [];
+    if (visibility === "closeFriends") {
+      // Accept either closeFriendIds[] (array field from FormData) or closeFriendIds (JSON)
+      const rawIds = req.body["closeFriendIds[]"] || req.body.closeFriendIds;
+      if (Array.isArray(rawIds)) {
+        closeFriendIds = rawIds.filter(Boolean);
+      } else if (typeof rawIds === "string" && rawIds) {
+        closeFriendIds = [rawIds];
+      }
+      if (closeFriendIds.length === 0) {
+        return res.status(400).json({ message: "Please select at least one close friend" });
+      }
+    }
 
     if (!req.file) {
       return res.status(400).json({ message: "Media file is required" });
@@ -48,6 +62,8 @@ export const createStory = async (req, res, next) => {
       viewers: [],
       likes: [],
       comments: [],
+      visibility,
+      closeFriendIds: visibility === "closeFriends" ? closeFriendIds : [],
     });
 
     res.status(201).json(story);
@@ -81,11 +97,16 @@ export const getStories = async (req, res, next) => {
     // Add our own ID to see our own stories
     userIds.add(userId.toString());
 
-    // 2. Find active stories for these users
+    // 2. Find active stories for these users, enforcing closeFriends visibility
     // Note: TTL index handles physical deletion, but we also filter in query just in case
     const activeStories = await Story.find({
       userId: { $in: Array.from(userIds) },
       expiresAt: { $gt: new Date() },
+      $or: [
+        { visibility: "everyone" },
+        { visibility: "closeFriends", closeFriendIds: userId },
+        { userId: userId }, // Always see your own stories regardless of privacy
+      ],
     })
       .populate("userId", "username profileImage")
       .populate("comments.userId", "username profileImage")

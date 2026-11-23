@@ -42,6 +42,17 @@ const storySchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+    visibility: {
+      type: String,
+      enum: ["everyone", "closeFriends"],
+      default: "everyone",
+    },
+    closeFriendIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     comments: [
       {
         userId: {

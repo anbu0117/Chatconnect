@@ -22,12 +22,16 @@ export const useStoryStore = create((set, get) => ({
     }
   },
 
-  uploadStory: async (mediaFile, caption = "") => {
+  uploadStory: async (mediaFile, caption = "", visibility = "everyone", closeFriendIds = []) => {
     set({ isUploadingStory: true });
     try {
       const formData = new FormData();
       formData.append("media", mediaFile);
       if (caption) formData.append("caption", caption);
+      formData.append("visibility", visibility);
+      if (visibility === "closeFriends" && closeFriendIds.length > 0) {
+        closeFriendIds.forEach((id) => formData.append("closeFriendIds[]", id));
+      }
 
       const res = await axiosInstance.post("/stories", formData, {
         headers: {

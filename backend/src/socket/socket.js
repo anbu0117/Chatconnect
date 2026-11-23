@@ -78,7 +78,7 @@ export const initSocket = (httpServer) => {
         try {
           const decoded = jwt.verify(token, process.env.JWT_SECRET);
           if (decoded?.userId) userId = String(decoded.userId);
-        } catch {}
+        } catch { }
       }
     }
 
