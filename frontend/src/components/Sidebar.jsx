@@ -49,7 +49,7 @@ const Sidebar = () => {
   } = useChatStore();
   const { onlineUsers, authUser } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState("chats"); // "chats" | "locked" | "users"
+  const [activeTab, setActiveTab] = useState("chats"); // "chats" | "locked"
   const [search, setSearch] = useState("");
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -73,6 +73,17 @@ const Sidebar = () => {
   const visibleUsers = onlineOnly
     ? users.filter((u) => onlineUsers.includes(u._id))
     : users;
+
+  // Registered users matching the search query who aren't already an active conversation partner
+  const matchingOtherUsers = search.trim()
+    ? visibleUsers.filter(
+        (u) =>
+          u._id !== authUser?._id &&
+          !conversations.some((c) =>
+            c.participants?.some((p) => (p._id || p) === u._id)
+          )
+      )
+    : [];
 
   // Filter regular conversations
   const filteredConversations = conversations.filter((conv) => {
@@ -102,12 +113,12 @@ const Sidebar = () => {
       {/* Story Strip at Top */}
       <StoryStrip />
 
-      {/* Navigation Tabs: Chats, Locked, and All Users */}
+      {/* Navigation Tabs: Chats and Locked */}
       <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800 px-2.5 pt-2 gap-1.5">
         <button
           type="button"
           onClick={() => setActiveTab("chats")}
-          className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition ${
+          className={`flex-1 py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition ${
             activeTab === "chats"
               ? "bg-brand-500 text-white shadow-sm"
               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
@@ -137,7 +148,7 @@ const Sidebar = () => {
               setPinModalOpen(true, "unlock");
             }
           }}
-          className={`py-2 px-2.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition ${
+          className={`flex-1 py-2 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition ${
             activeTab === "locked"
               ? "bg-amber-500 text-white shadow-sm"
               : "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
@@ -151,20 +162,6 @@ const Sidebar = () => {
           )}
           <span>Locked</span>
         </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("users")}
-          className={`flex-1 py-2 px-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition ${
-            activeTab === "users"
-              ? "bg-brand-500 text-white shadow-sm"
-              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-          }`}
-          title="All registered users"
-        >
-          <Users className="h-3.5 w-3.5" />
-          <span>Users</span>
-        </button>
       </div>
 
       {/* Search & Filter Header */}
@@ -175,11 +172,9 @@ const Sidebar = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={
-              activeTab === "chats"
-                ? "Search chats..."
-                : activeTab === "locked"
+              activeTab === "locked"
                 ? "Search locked chats..."
-                : "Search users to message..."
+                : "Search chats or people..."
             }
             className="w-full rounded-lg border border-neutral-300 bg-transparent py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-neutral-700"
           />
@@ -201,27 +196,21 @@ const Sidebar = () => {
           <SidebarSkeleton />
         ) : activeTab === "chats" ? (
           /* ================= CHATS TAB ================= */
-          filteredConversations.length === 0 ? (
+          filteredConversations.length === 0 && matchingOtherUsers.length === 0 ? (
             <div className="flex flex-col items-center gap-3 p-8 text-center text-sm text-neutral-400">
               <div className="w-12 h-12 rounded-full bg-brand-500/10 text-brand-500 flex items-center justify-center">
                 <MessageSquare className="h-6 w-6" />
               </div>
               <div>
                 <p className="font-semibold text-neutral-700 dark:text-neutral-300">
-                  No active chats yet
+                  {search ? "No chats or people found" : "No active chats yet"}
                 </p>
                 <p className="text-xs text-neutral-400 mt-1">
-                  Start a private conversation with any registered user!
+                  {search
+                    ? "Try searching with a different username"
+                    : "Type a name in search above to start a conversation!"}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("users")}
-                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 transition shadow-sm"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Start Private Chat</span>
-              </button>
             </div>
           ) : (
             <ul className="p-2 space-y-1">
@@ -287,9 +276,58 @@ const Sidebar = () => {
                   </li>
                 );
               })}
+
+              {matchingOtherUsers.length > 0 && (
+                <>
+                  <li className="pt-3 pb-1 px-2 text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                    People
+                  </li>
+                  {matchingOtherUsers.map((user) => {
+                    const isOnline = onlineUsers.includes(user._id);
+                    const isSelected = selectedUser?._id === user._id;
+
+                    return (
+                      <li key={user._id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUser(user)}
+                          className={`flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition ${
+                            isSelected
+                              ? "bg-brand-500/15 dark:bg-brand-500/20"
+                              : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                          }`}
+                        >
+                          <div className="relative shrink-0">
+                            <img
+                              src={user.profileImage || "/default-avatar.svg"}
+                              alt={user.username}
+                              className="h-10 w-10 rounded-full object-cover ring-1 ring-neutral-200 dark:ring-neutral-700"
+                            />
+                            {isOnline && (
+                              <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-surface-dark" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                              {user.username}
+                            </p>
+                            <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                              {isOnline ? (
+                                <span className="text-emerald-500 font-medium">Online</span>
+                              ) : (
+                                user.bio || "Click to message"
+                              )}
+                            </p>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </>
+              )}
             </ul>
           )
-        ) : activeTab === "locked" ? (
+        ) : (
           /* ================= LOCKED CHATS TAB ================= */
           !isLockedChatsUnlocked ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in duration-200">
@@ -405,72 +443,6 @@ const Sidebar = () => {
                 </ul>
               )}
             </div>
-          )
-        ) : (
-          /* ================= ALL USERS TAB ================= */
-          visibleUsers.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-neutral-400">
-              <Users className="h-6 w-6" />
-              No people found
-            </div>
-          ) : (
-            <ul className="p-2 space-y-1">
-              {visibleUsers.map((user) => {
-                const isOnline = onlineUsers.includes(user._id);
-                const isSelected = selectedUser?._id === user._id;
-
-                return (
-                  <li key={user._id}>
-                    <div
-                      className={`flex w-full items-center justify-between gap-2.5 rounded-xl p-2.5 text-left transition ${
-                        isSelected
-                          ? "bg-brand-500/15 dark:bg-brand-500/20"
-                          : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelectedUser(user)}
-                        className="flex items-center gap-3 min-w-0 flex-1 text-left"
-                      >
-                        <div className="relative shrink-0">
-                          <img
-                            src={user.profileImage || "/default-avatar.svg"}
-                            alt={user.username}
-                            className="h-10 w-10 rounded-full object-cover ring-1 ring-neutral-200 dark:ring-neutral-700"
-                          />
-                          {isOnline && (
-                            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-surface-dark" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                            {user.username}
-                          </p>
-                          <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
-                            {isOnline ? (
-                              <span className="text-emerald-500 font-medium">Online</span>
-                            ) : (
-                              user.bio || "Available"
-                            )}
-                          </p>
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedUser(user)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500 text-brand-600 hover:text-white dark:bg-brand-500/20 dark:hover:bg-brand-500 dark:text-brand-300 dark:hover:text-white transition text-xs font-medium shrink-0"
-                        title={`Start private chat with ${user.username}`}
-                      >
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Chat</span>
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
           )
         )}
       </div>
