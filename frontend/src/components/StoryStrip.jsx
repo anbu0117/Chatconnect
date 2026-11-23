@@ -57,6 +57,7 @@ const StoryStrip = () => {
   // Check if the current user has any active stories
   const currentUserStoryGroup = stories.find((s) => s.user._id === authUser._id);
   const hasStories = !!currentUserStoryGroup;
+  const currentUserHasCloseFriends = currentUserStoryGroup?.stories?.some((s) => s.visibility === "closeFriends");
 
   // Find index of current user's story if it exists
   const currentUserIndex = stories.findIndex((s) => s.user._id === authUser._id);
@@ -67,8 +68,13 @@ const StoryStrip = () => {
         {/* Upload / My Story Button */}
         <div className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer relative">
           <div
-            className={`w-14 h-14 rounded-full p-[2px] ${hasStories ? "bg-gradient-to-tr from-yellow-400 to-fuchsia-600" : "bg-base-300"
-              }`}
+            className={`w-14 h-14 rounded-full p-[2px] ${
+              hasStories
+                ? currentUserHasCloseFriends
+                  ? "bg-gradient-to-tr from-emerald-400 to-green-500"
+                  : "bg-gradient-to-tr from-yellow-400 to-fuchsia-600"
+                : "bg-base-300"
+            }`}
             onClick={() =>
               hasStories ? openStoryViewer(currentUserIndex, 0) : handleUploadClick()
             }
@@ -119,6 +125,8 @@ const StoryStrip = () => {
               s.viewers?.some((v) => (v.userId?._id || v.userId) === authUser._id)
             );
 
+          const hasCloseFriends = storyGroup.stories?.some((s) => s.visibility === "closeFriends");
+
           return (
             <div
               key={storyGroup.user._id}
@@ -126,10 +134,13 @@ const StoryStrip = () => {
               onClick={() => openStoryViewer(index, 0)}
             >
               <div
-                className={`w-14 h-14 rounded-full p-[2px] transition-all duration-300 ${allViewed
+                className={`w-14 h-14 rounded-full p-[2px] transition-all duration-300 ${
+                  allViewed
                     ? "bg-base-300 dark:bg-base-700"
-                    : "bg-gradient-to-tr from-yellow-400 to-fuchsia-600"
-                  }`}
+                    : hasCloseFriends
+                      ? "bg-gradient-to-tr from-emerald-400 to-green-500"
+                      : "bg-gradient-to-tr from-yellow-400 to-fuchsia-600"
+                }`}
               >
                 <img
                   src={storyGroup.user.profileImage || "/avatar.png"}

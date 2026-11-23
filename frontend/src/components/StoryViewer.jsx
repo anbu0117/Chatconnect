@@ -285,9 +285,16 @@ const StoryViewer = () => {
               className="w-10 h-10 rounded-full border border-white/20 object-cover"
             />
             <div>
-              <p className="text-white font-medium text-sm drop-shadow-md">
-                {currentStoryGroup.user.username}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-white font-medium text-sm drop-shadow-md">
+                  {currentStoryGroup.user.username}
+                </p>
+                {currentStory?.visibility === "closeFriends" && (
+                  <span className="bg-emerald-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                    ★ Close Friends
+                  </span>
+                )}
+              </div>
               <p className="text-white/70 text-xs drop-shadow-md">
                 {new Date(currentStory.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
