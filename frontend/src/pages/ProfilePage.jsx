@@ -18,6 +18,57 @@ const AVATAR_PRESETS = [
   "https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan",
 ];
 
+const compressImage = (file, maxWidth = 400, maxHeight = 400, quality = 0.85) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              });
+              resolve({ file: compressedFile, previewUrl: URL.createObjectURL(blob) });
+            } else {
+              resolve({ file, previewUrl: event.target.result });
+            }
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = () => resolve({ file, previewUrl: event.target.result });
+    };
+    reader.onerror = () => resolve({ file, previewUrl: URL.createObjectURL(file) });
+  });
+};
+
 const ProfilePage = () => {
   const { authUser, updateProfileInStore } = useAuthStore();
   const fileInputRef = useRef(null);
@@ -54,7 +105,7 @@ const ProfilePage = () => {
     setIsEditing(false);
   };
 
-  const handleImageSelect = (e) => {
+  const handleImageSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -62,13 +113,19 @@ const ProfilePage = () => {
       toast.error("Please select a valid image file");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image must be smaller than 5MB");
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error("Image must be smaller than 15MB");
       return;
     }
 
-    setSelectedImageFile(file);
-    setPreviewImage(URL.createObjectURL(file));
+    try {
+      const { file: compressedFile, previewUrl } = await compressImage(file);
+      setSelectedImageFile(compressedFile);
+      setPreviewImage(previewUrl);
+    } catch {
+      setSelectedImageFile(file);
+      setPreviewImage(URL.createObjectURL(file));
+    }
   };
 
   const handleSelectPreset = (url) => {
@@ -98,9 +155,8 @@ const ProfilePage = () => {
         formData.append("bio", bio.trim());
         formData.append("profileImage", selectedImageFile);
 
-        res = await axiosInstance.put("/users/profile", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        // Do not set Content-Type header manually so Axios sets the boundary properly
+        res = await axiosInstance.put("/users/profile", formData);
       } else {
         res = await axiosInstance.put("/users/profile", {
           username: trimmedUsername,
@@ -114,7 +170,12 @@ const ProfilePage = () => {
       setIsEditing(false);
       toast.success("Profile updated successfully!");
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update profile");
+      const errorMsg =
+        error.response?.data?.message ||
+        (Array.isArray(error.response?.data?.errors) && error.response.data.errors[0]?.message) ||
+        error.message ||
+        "Failed to update profile";
+      toast.error(errorMsg);
     } finally {
       setIsSaving(false);
     }

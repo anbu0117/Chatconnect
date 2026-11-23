@@ -41,8 +41,9 @@ export const updateProfile = async (req, res, next) => {
         return res.status(400).json({ message: "Username must be between 3 and 30 characters" });
       }
       if (trimmedUsername !== req.user.username) {
+        const safeRegex = trimmedUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const existing = await User.findOne({
-          username: { $regex: new RegExp(`^${trimmedUsername}$`, "i") },
+          username: { $regex: new RegExp(`^${safeRegex}$`, "i") },
           _id: { $ne: req.user._id },
         });
         if (existing) {

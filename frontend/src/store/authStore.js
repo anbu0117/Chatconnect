@@ -181,7 +181,19 @@ export const useAuthStore = create((set, get) => ({
   updateProfileInStore: (updatedUser) => {
     const current = get().authUser;
     const merged = { ...current, ...updatedUser };
-    localStorage.setItem("chatconnect_user", JSON.stringify(merged));
+    try {
+      localStorage.setItem("chatconnect_user", JSON.stringify(merged));
+    } catch (storageErr) {
+      console.warn("Could not save full user to localStorage (quota exceeded?):", storageErr);
+      try {
+        // If image is a large data URI, strip it from localStorage cache to prevent quota error
+        const safeUser = {
+          ...merged,
+          profileImage: merged.profileImage?.startsWith("data:") ? "" : merged.profileImage,
+        };
+        localStorage.setItem("chatconnect_user", JSON.stringify(safeUser));
+      } catch {}
+    }
     set({ authUser: merged });
   },
 
