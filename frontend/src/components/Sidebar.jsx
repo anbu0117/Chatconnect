@@ -164,15 +164,6 @@ const Sidebar = () => {
         >
           <Users className="h-3.5 w-3.5" />
           <span>Users</span>
-          <span
-            className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-              activeTab === "users"
-                ? "bg-white text-brand-600"
-                : "bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
-            }`}
-          >
-            {users.length}
-          </span>
         </button>
       </div>
 
